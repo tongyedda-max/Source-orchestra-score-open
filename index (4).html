@@ -1,0 +1,3166 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>樂團譜架 · Orchestra Stand</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+  :root{--bg:#101418;--panel:#1a2027;--panel2:#222b34;--text:#e8edf2;--muted:#93a1b0;
+    --accent:#4da3ff;--gold:#ffcc4d;--danger:#ff6b6b;--ok:#4dd882;--hh:64px}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;background:var(--bg);color:var(--text);
+    font-family:-apple-system,"PingFang TC","Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif}
+  header{position:fixed;top:0;left:0;right:0;z-index:40;background:var(--panel);padding:10px 12px;
+    display:flex;align-items:center;gap:8px;box-shadow:0 2px 10px rgba(0,0,0,.4)}
+  header h1{font-size:16px;margin:0;flex:1;min-width:0;white-space:nowrap;overflow:hidden;
+    text-overflow:ellipsis;cursor:pointer}
+  .pill{background:var(--panel2);border:1px solid #33414f;color:var(--text);border-radius:999px;
+    padding:8px 10px;font-size:13px;cursor:pointer;min-height:38px;text-decoration:none;
+    display:inline-flex;align-items:center;gap:4px;flex-shrink:0}
+  .pill.role{border-color:var(--accent);color:var(--accent);font-weight:700}
+  .pill.role.admin{border-color:var(--gold);color:var(--gold)}
+  #view{padding:16px;max-width:860px;margin:0 auto;
+    padding-top:calc(var(--hh) + 16px);padding-bottom:120px}
+  .card{background:var(--panel);border-radius:14px;padding:14px;margin-bottom:12px}
+  .card h3{margin:0 0 4px;font-size:16px;word-break:break-all}
+  .meta{color:var(--muted);font-size:13px;margin-bottom:10px}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:none;
+    border-radius:12px;padding:12px 14px;font-size:15px;min-height:46px;cursor:pointer;
+    background:var(--panel2);color:var(--text)}
+  .btn.primary{background:var(--accent);color:#04121f;font-weight:700}
+  .btn.warn{background:var(--danger);color:#2b0505;font-weight:700}
+  .btn.gold{background:var(--gold);color:#241b02;font-weight:700}
+  .btn.sm{min-height:38px;padding:8px 12px;font-size:13px}
+  .btn:disabled{opacity:.35;cursor:default}
+  .row{display:flex;gap:8px;flex-wrap:wrap}
+  input[type=password]{width:100%;background:var(--panel2);border:1px solid #33414f;
+    color:var(--text);border-radius:12px;padding:12px 14px;font-size:16px;margin:8px 0}
+  .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:130px;background:#000e;
+    color:#fff;padding:13px 18px;border-radius:12px;z-index:99;max-width:92%;
+    white-space:pre-line;text-align:center;font-size:14px;display:none}
+  .badge{background:var(--panel2);border:1px solid #33414f;border-radius:999px;
+    padding:5px 10px;font-size:12px;white-space:nowrap}
+  .badge.live-gold{border-color:var(--gold);color:var(--gold);font-weight:700}
+  .badge.liveRed{border-color:var(--danger);color:#fff;background:var(--danger);
+    font-weight:700;animation:blink 1.2s infinite}
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:.45}}
+  #liveBanner{background:linear-gradient(135deg,#3a2f08,#2a230a);border:1px solid var(--gold);
+    border-radius:14px;padding:12px 14px;margin-bottom:14px;display:flex;align-items:center;
+    gap:10px;flex-wrap:wrap}
+  #liveBanner .txt{flex:1;min-width:160px}
+  #liveBanner .txt b{color:var(--gold)}
+  #crumbs{display:flex;align-items:center;gap:2px;flex-wrap:wrap;margin-bottom:12px;
+    font-size:14px;line-height:2}
+  #crumbs a{color:var(--accent);cursor:pointer;text-decoration:none;padding:2px 6px;
+    border-radius:8px;background:var(--panel)}
+  #crumbs .sep{color:var(--muted)}
+  .homeTabs{display:flex;gap:8px;margin-bottom:14px}
+  .htab{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;
+    background:var(--panel);border:2px solid #33414f;color:var(--muted);
+    border-radius:12px;padding:11px 10px;font-size:14px;font-weight:700;
+    cursor:pointer;min-height:46px}
+  .htab.on{border-color:var(--accent);color:var(--accent);background:var(--panel2)}
+  .viewer{position:fixed;left:0;right:0;bottom:0;top:var(--hh);
+    background:var(--bg);display:flex;flex-direction:column;z-index:30}
+  .vtop{display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--panel);
+    flex-shrink:0}
+  .vtop .title{font-weight:700;font-size:14px;flex:1;min-width:0;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .grp{background:var(--panel);border-top:1px solid #2a3540;flex-shrink:0}
+  .ghead{width:100%;display:flex;align-items:center;justify-content:space-between;
+    background:none;border:none;color:var(--text);font-size:13px;font-weight:700;
+    padding:9px 14px;cursor:pointer}
+  .ghead .arr{transition:transform .2s;color:var(--muted)}
+  .grp.open .ghead .arr{transform:rotate(180deg)}
+  .gbody{display:none;align-items:center;gap:8px;padding:2px 12px 10px;overflow-x:auto}
+  .grp.open .gbody{display:flex}
+  .tbtn{background:var(--panel2);border:2px solid #33414f;color:var(--text);border-radius:10px;
+    min-width:38px;height:38px;font-size:15px;cursor:pointer;flex-shrink:0;
+    display:inline-flex;align-items:center;justify-content:center;padding:0 9px;white-space:nowrap}
+  .tbtn.active{border-color:var(--gold);color:var(--gold)}
+  .tbtn.liveOn{border-color:var(--danger);color:#fff;background:var(--danger);
+    animation:blink 1.2s infinite}
+  .swatch{width:34px;height:34px;border-radius:50%;background:#fff;
+    border:2px solid #566572;display:inline-flex;align-items:center;justify-content:center;
+    cursor:pointer;flex-shrink:0;padding:0}
+  .swatch span{width:20px;height:20px;border-radius:50%;display:block}
+  .swatch.active{border-color:var(--gold);box-shadow:0 0 0 2px var(--gold)}
+  #fabDock{position:absolute;right:12px;bottom:96px;z-index:36;display:none;
+    flex-direction:column;align-items:center;gap:8px}
+  .fabActions{display:none;flex-direction:column;gap:8px}
+  .fabMini{width:46px;height:46px;border-radius:50%;border:2px solid #33414f;
+    background:var(--panel2);font-size:18px;cursor:pointer;padding:0;line-height:1}
+  .fabMini.active{border-color:var(--gold);color:var(--gold)}
+  #fab{width:48px;height:48px;border-radius:50%;border:2px solid var(--gold);
+    background:var(--panel2);color:var(--gold);font-size:20px;cursor:pointer;padding:0;
+    line-height:1;touch-action:none;user-select:none;-webkit-user-select:none}
+  #fsExit{position:absolute;top:10px;right:10px;z-index:37;display:none}
+  .pop{position:fixed;left:50%;bottom:110px;transform:translateX(-50%);
+    background:var(--panel);border:1px solid #33414f;border-radius:14px;padding:14px 16px;
+    display:none;z-index:60;box-shadow:0 6px 24px rgba(0,0,0,.7);width:min(92vw,360px)}
+  .pop input[type=range]{width:100%;height:30px;margin:4px 0 2px;accent-color:var(--accent)}
+  .plabel{font-size:12px;color:var(--muted);margin:8px 0 4px}
+  #printPop label{display:flex;align-items:center;gap:8px;padding:5px 2px;font-size:14px}
+  #printPop input[type=radio]{accent-color:var(--accent);width:17px;height:17px}
+  #textPop textarea{width:100%;background:var(--panel2);border:1px solid #33414f;
+    color:var(--text);border-radius:12px;padding:10px 12px;font-size:15px;resize:vertical;margin-top:6px}
+  #annPop input[type=text]{width:100%;background:var(--panel2);border:1px solid #33414f;
+    color:var(--text);border-radius:12px;padding:11px 13px;font-size:15px;margin:6px 0}
+  #annPop textarea{width:100%;background:var(--panel2);border:1px solid #33414f;
+    color:var(--text);border-radius:12px;padding:11px 13px;font-size:15px;resize:vertical;
+    margin:6px 0;min-height:110px}
+  #annPop label{display:flex;align-items:center;gap:8px;font-size:14px;margin:8px 0}
+  #annPop input[type=checkbox]{accent-color:var(--gold);width:18px;height:18px}
+  .annPinned{border:1px solid var(--gold)}
+  .annBody{font-size:14px;line-height:1.8;color:#dfe7ee;white-space:pre-wrap;
+    word-break:break-word;margin-bottom:8px}
+  .overlay{position:fixed;left:0;right:0;top:0;bottom:0;background:#000b;
+    z-index:80;display:none}
+  .centerPop{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);
+    background:var(--panel);border-radius:18px;padding:18px 16px;display:none;
+    box-shadow:0 10px 40px rgba(0,0,0,.8);width:min(92vw,400px);
+    max-height:86vh;overflow:auto;z-index:81}
+  #clearPop{border:2px solid var(--danger)}
+  #layerPop{border:2px solid var(--accent)}
+  #fileMenuPop{border:2px solid var(--accent)}
+  #annPop{border:2px solid var(--accent)}
+  #hintPop{border:2px solid var(--ok);z-index:85}
+  #hintOverlay{z-index:84}
+  .centerPop h3{margin:0 0 10px;font-size:17px;text-align:center;word-break:break-all}
+  #clearBody{font-size:14px;line-height:1.8;color:#dfe7ee}
+  #clearBody b{color:var(--gold)}
+  #clearBody .own{background:var(--panel2);border-radius:8px;padding:2px 10px;
+    display:inline-block;margin:2px 0}
+  .hintStep{background:var(--panel2);border-radius:10px;padding:9px 12px;margin:7px 0;
+    font-size:14px;line-height:1.6}
+  .hintStep b{color:var(--gold)}
+  .menuBtn{display:flex;align-items:center;gap:10px;width:100%;background:var(--panel2);
+    border:none;color:var(--text);border-radius:10px;padding:12px 14px;font-size:15px;
+    cursor:pointer;margin:5px 0;text-align:left}
+  .menuBtn.danger{color:var(--danger)}
+  #undoChip{position:fixed;left:50%;transform:translateX(-50%);bottom:80px;z-index:70;
+    display:none;border-color:var(--gold);color:var(--gold);font-weight:700}
+  .lrow{display:flex;align-items:center;gap:8px;padding:9px 4px;
+    border-bottom:1px solid #2a3540;font-size:14px}
+  .lrow:last-child{border-bottom:none}
+  .lrow input[type=radio]{accent-color:var(--accent);width:17px;height:17px;flex-shrink:0}
+  .lrow .grow{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .lrow .del{background:none;border:none;color:var(--danger);font-size:16px;
+    cursor:pointer;padding:4px 8px;flex-shrink:0}
+  #rolePop{position:fixed;top:calc(var(--hh) + 4px);right:8px;z-index:65;
+    background:var(--panel);border:1px solid var(--accent);border-radius:14px;
+    padding:14px;min-width:min(86vw,310px);max-height:76vh;overflow:auto;display:none;
+    box-shadow:0 8px 30px rgba(0,0,0,.7)}
+  #rolePop .rTitle{font-size:14px;font-weight:700;margin-bottom:8px;color:var(--accent)}
+  #rolePop .rNow{background:var(--panel2);border-radius:10px;padding:9px 12px;
+    font-size:14px;margin-bottom:8px;line-height:1.6}
+  #rolePop .liveBox{border:1px solid var(--danger);border-radius:10px;padding:9px 12px;
+    font-size:14px;margin-bottom:8px;background:#2a1215}
+  #rolePop .liveBox b{color:#ff8a8a}
+  #rolePop .btn{width:100%;margin-top:7px}
+  #rolePop .sep{border-top:1px solid #2a3540;margin:9px 0}
+  #stage{flex:1;overflow:auto;padding:8px}
+  #zoomWrap{position:relative;margin:0 auto;width:max-content;transform-origin:top center}
+  #stage.drawing{outline:2px dashed var(--gold);outline-offset:-2px}
+  #pdfCanvas{background:#fff;border-radius:6px;box-shadow:0 4px 20px rgba(0,0,0,.5);
+    max-width:none;display:block}
+  .vctrl{display:flex;align-items:center;justify-content:center;gap:12px;padding:10px;
+    background:var(--panel);flex-shrink:0;flex-wrap:wrap}
+  .pagenum{font-size:14px;color:var(--muted);min-width:80px;text-align:center}
+  body.fs-mode header, body.fs-mode .vtop, body.fs-mode .grp, body.fs-mode .vctrl{display:none}
+  body.fs-mode .viewer{top:0}
+  body.fs-mode #fsExit{display:inline-flex}
+  body.fs-mode #fabDock{display:none!important}
+  #printArea{display:none}
+  @media print{
+    @page{margin:8mm}
+    body.printing > *:not(#printArea){display:none!important}
+    body.printing #printArea{display:block!important}
+    #printArea img{width:100%;display:block;page-break-after:always}
+    #printArea img:last-child{page-break-after:auto}
+  }
+  .center{text-align:center}
+  .spinner{width:38px;height:38px;border:4px solid #33414f;border-top-color:var(--accent);
+    border-radius:50%;animation:spin 1s linear infinite;margin:40px auto}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  details{background:var(--panel);border-radius:12px;padding:11px 14px;margin-bottom:10px}
+  summary{font-weight:700;cursor:pointer;font-size:14px}
+  details div{margin-top:9px;line-height:1.8;font-size:13px;color:#cdd7e1}
+  details b{color:var(--gold)}
+  .step{background:var(--panel2);border-radius:10px;padding:8px 12px;margin:6px 0}
+  .tbl{width:100%;border-collapse:collapse;font-size:12px;margin:8px 0}
+  .tbl th,.tbl td{border:1px solid #33414f;padding:6px 8px;text-align:left}
+  .tbl th{background:var(--panel2);color:var(--gold)}
+  #gateWrap{min-height:70vh;display:flex;flex-direction:column;align-items:center;
+    justify-content:center;text-align:center}
+  #gateWrap .lock{font-size:52px;margin-bottom:8px}
+  #gateWrap h2{margin:0 0 6px;font-size:22px}
+  #gateWrap p{color:var(--muted);font-size:14px;max-width:320px;line-height:1.7}
+  #gateCard{background:var(--panel);border-radius:16px;padding:22px 20px;
+    width:min(92vw,360px);margin-top:14px}
+  .clipInfo{background:#2a230a;border:1px solid var(--gold);border-radius:10px;
+    padding:8px 12px;font-size:13px;margin-bottom:10px;color:var(--gold)}
+</style>
+</head>
+<body>
+<header>
+  <h1 id="appTitle" onclick="if(gatePassed()){state.homeTab='library';location.hash='#/library';}">🎼 樂團譜架</h1>
+  <button class="pill role" id="roleBtn" onclick="toggleRolePop()">👤 ▾</button>
+  <a class="pill" href="#/help">❓</a>
+  <button class="pill" id="langBtn" onclick="toggleLang()">EN</button>
+</header>
+<div id="view"></div>
+<div class="toast" id="toast"></div>
+<button class="pill" id="undoChip" onclick="undoCleared()">↩️ 復原清除</button>
+<div id="printArea"></div>
+
+<div class="overlay" id="clearOverlay"></div>
+<div class="centerPop" id="clearPop">
+  <h3 id="clearTitle"></h3>
+  <div id="clearBody"></div>
+  <button class="btn warn" id="clearGo" style="width:100%;min-height:52px;margin-top:12px"></button>
+  <button class="btn" id="clearCancel" onclick="closeClearPop()"
+    style="width:100%;min-height:48px;margin-top:8px"></button>
+</div>
+
+<div class="overlay" id="layerOverlay" onclick="closeLayerPop()"></div>
+<div class="centerPop" id="layerPop">
+  <h3 id="layerTitle">🗂️</h3>
+  <div id="layerList"></div>
+  <div id="alphaRow" style="display:none">
+    <div class="plabel" id="layerAlphaLabel"></div>
+    <input type="range" id="layerAlphaR" min="10" max="100" step="5">
+  </div>
+  <div class="plabel" id="layerHint" style="font-size:12px;color:var(--muted)"></div>
+  <input type="file" id="layerFile" accept="application/pdf" style="display:none">
+  <div class="row" style="margin-top:10px;justify-content:flex-end">
+    <button class="btn primary" id="layerUploadBtn" style="display:none"
+      onclick="uploadLayer()">⬆️</button>
+    <button class="btn" id="layerCloseBtn" onclick="closeLayerPop()"></button>
+  </div>
+</div>
+
+<div class="overlay" id="fileMenuOverlay" onclick="closeFileMenu()"></div>
+<div class="centerPop" id="fileMenuPop">
+  <h3 id="fileMenuTitle"></h3>
+  <div id="fileMenuBody"></div>
+  <button class="btn" id="fileMenuCancel" style="width:100%;margin-top:8px"
+    onclick="closeFileMenu()"></button>
+</div>
+
+<div class="overlay" id="annOverlay" onclick="closeAnnModal()"></div>
+<div class="centerPop" id="annPop">
+  <h3 id="annPopTitle"></h3>
+  <input type="text" id="annTitleInput" maxlength="120">
+  <textarea id="annBodyInput" maxlength="4000"></textarea>
+  <label><input type="checkbox" id="annPinInput"><span id="annPinLabel"></span></label>
+  <div class="row" style="margin-top:10px;justify-content:flex-end">
+    <button class="btn" onclick="closeAnnModal()" id="annCancelBtn"></button>
+    <button class="btn primary" onclick="saveAnnouncement()" id="annSaveBtn"></button>
+  </div>
+</div>
+
+<div class="overlay" id="hintOverlay" onclick="closeHint()"></div>
+<div class="centerPop" id="hintPop">
+  <h3 id="hintT"></h3>
+  <div id="hintBody"></div>
+  <button class="btn primary" style="width:100%;min-height:50px;margin-top:12px"
+    onclick="closeHint()">✅</button>
+</div>
+
+<div id="rolePop"></div>
+
+<script>
+/* ================= 設定 ================= */
+const SUPABASE_URL = 'https://bfatudxcmwkgiqzgdosn.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_kLc1qqJY28vBljmwXEUHgw_hLJCynll';
+const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+const COLORS = { red:'#ff5252', blue:'#4da3ff', green:'#3ddc84', orange:'#ffb648',
+  black:'#1c1c1c', white:'#ffffff' };
+const ZOOM_MAX = 5;
+
+/* ================= 雙語 ================= */
+const I18N = {
+  zh: {
+    appTitle:'🎼 樂團譜架',
+    gateLock:'🔒', gateTitle:'樂團譜架',
+    gateDesc:'本網站僅供樂團成員使用。\n請輸入進站密碼：',
+    gatePh:'進站密碼', gateEnter:'進入', gateWrong:'❌ 進站密碼錯誤',
+    adminSection:'🔐 譜務 PDF 管理（總監）', adminOk:'✅ 總監已啟用',
+    uploadBtn:'📄 上載 PDF 到此資料夾（可多選）',
+    uploadDone:'✅ 全部上載完成', uploading:'上載中',
+    broadcast:'📻 廣播此譜', stopB:'⏹️ 停止廣播', stopOk:'⏹️ 已停止廣播',
+    liveBtnOn:'⏹️ 停止廣播', liveBtnOff:'📻 廣播此譜',
+    liveBtnOther:'📻 改為廣播此譜',
+    startConfirm:'開始向全團廣播此譜？（其他人會被引導到此譜）',
+    stopConfirm:'確定停止廣播？全團將不再跟隨此譜。',
+    liveTag:'📻 廣播中', liveBadge:'● LIVE',
+    confirmDel:'確定刪除「{t}」？無法復原。',
+    noScores:'此資料夾是空的。總監可上載 PDF 或新增資料夾。',
+    backLib:'← 返回', noBroadcast:'現在沒有廣播中的樂譜',
+    goLib:'前往樂譜庫', masterPage:'主控頁', jumpMaster:'⇢ 跳至主控頁',
+    wrongPw:'❌ 密碼錯誤', startOk:'📻 已開始廣播', delOk:'✅ 已刪除',
+    pwPrompt:'請輸入編輯密碼（成為聲部長）：',
+    adminPwPrompt:'請輸入譜務密碼（成為總監）：',
+    needAdmin:'❌ 需要總監權限（右上角身份選單啟用）',
+    needEdit:'請先成為聲部長或總監（右上角身份選單）',
+    askName:'您的姓名（公開顯示，切勿用密碼）：',
+    nameUnsafe:'⚠️ 姓名不可包含密碼：', nameSet:'✅ 姓名：{n}',
+    viewBtn:'👁️ 檢視', viewTag:'👁️ 檢視中',
+    liveNow:'📻 正在廣播', goLive:'📺 觀看',
+    roleBtn:'你的身份',
+    roleMember:'👤 團員', roleMemberDesc:'檢視全部樂譜、公告、跟隨廣播翻頁',
+    roleCo:'🤝 聲部長・協作', roleCoDesc:'任何譜都可畫弓法／文字、上載圖層；翻頁不廣播',
+    roleMaster:'👑 聲部長・主控', roleMasterDesc:'任何譜都可編輯；翻頁廣播給全團',
+    roleChief:'🛡️ 譜務管理總監', roleChiefDesc:'全部權限：編輯、檔案總管、系統管理',
+    becomeLeader:'✍️ 成為聲部長', becomeAdmin:'🛡️ 成為總監',
+    exitRole:'🚪 退出身份（回到團員）',
+    exitRoleConfirm:'退出目前身份，回到團員？',
+    exitedRole:'✅ 已退出，回到團員身份',
+    logout:'🚪 登出（清除進站記憶）',
+    logoutConfirm:'登出？下次進入需重新輸入進站密碼。',
+    rename:'✏️ 改姓名', takeover:'👑 接管主控', takeoverOk:'👑 已接管主控',
+    claimOk1:'👑 主控（1/2）', claimOk2:'🤝 協作（2/2）',
+    editorsFull:'⚠️ 已有兩位聲部長在線', slotLost:'⚠️ 編輯資格失效，請重新啟用',
+    chiefOk:'🛡️ 總監模式已啟用',
+    liveStatusNone:'📭 目前無廣播',
+    liveStatusOn:'📻 廣播中：',
+    roleStopLive:'⏹️ 關閉廣播',
+    roleStartLive:'📻 廣播此譜',
+    rootName:'🏠 樂譜庫',
+    fmTitle:'⋯ 操作', fmOpen:'📂 打開', fmView:'👁️ 檢視', fmBroadcast:'📻 廣播',
+    fmRename:'✏️ 重新命名', fmCut:'✂️ 剪下', fmCopy:'📄 複製',
+    fmDelete:'🗑️ 刪除', fmCancel:'✋ 取消',
+    clipCut:'✂️ 已剪下：{n}（到目標資料夾按「貼上」）',
+    clipCopy:'📄 已複製：{n}（到目標資料夾按「貼上」）',
+    pasteB:'📋 貼上', pasteHere:'貼到：{p}',
+    pasteOk:'✅ 已貼上', newFolder:'➕ 新增資料夾',
+    folderNameAsk:'資料夾名稱：', folderCreated:'✅ 已新增資料夾',
+    folderNotEmpty:'❌ 資料夾不是空的——請先清空內容再刪除',
+    badTarget:'❌ 不能移動到自身或其子資料夾',
+    renameAsk:'輸入新名稱：', renameOk:'✅ 已改名',
+    renameAskFolder:'新資料夾名稱：',
+    tabLibrary:'📚 樂譜庫', tabAnn:'📢 公告欄',
+    annAdd:'➕ 新增公告', annEmpty:'暫時沒有公告。',
+    annNewTitle:'➕ 新增公告', annEditTitle:'✏️ 編輯公告',
+    annPhTitle:'公告標題', annPhBody:'公告內容…（可換行）',
+    annPin:'📌 釘選在頂部',
+    annSave:'✅ 儲存', annCancel:'取消',
+    annSaved:'✅ 已儲存公告', annDeleted:'🗑️ 已刪除公告',
+    annConfirmDel:'刪除此公告？', annEdited:'已編輯',
+    annNeedContent:'請輸入標題或內容',
+    grpView:'📄 檢視與廣播',
+    grpEdit:'✍️ 弓法編輯（聲部長 / 總監）',
+    grpChief:'👑 總監工具',
+    hintT:'📱 快速上手',
+    hint1:'<b>翻頁</b>：點擊畫面左／右側、左右滑動、或底部 ◀ ▶',
+    hint2:'<b>縮放</b>：雙指張開／收合；🔍 還原 1×',
+    hint3:'<b>身份</b>：右上角按鈕——啟用聲部長（可編輯）／總監／登出',
+    hint4:'<b>編輯</b>：手指／觸控筆／滑鼠都畫到，粗細一致；🛠️ 可拖動，點開有 ↩️復原／🧽點擦／🧹清除；按住 S Pen 筆桿按鈕＝即時點擦，放開返回',
+    hint5:'<b>廣播</b>：按「📻 廣播此譜」全團同步；狀態與關閉在右上角身份選單',
+    layersB:'🗂️ 圖層', layerTitle:'🗂️ 圖層對比',
+    layerBase:'原譜（不疊圖層）', layerAlphaLabel:'圖層透明度',
+    layerHint:'💡 同時只可啟用一個圖層；選「原譜」固定不疊。列印／匯出不含圖層。',
+    layerUpload:'⬆️ 上載我的圖層',
+    layerNameAsk:'圖層名稱（公開顯示，切勿用密碼）：',
+    layerUploaded:'✅ 已上載',
+    layerPageMismatch:'❌ 頁數不符（{a}p vs {b}p）',
+    layerDelConfirm:'刪除此圖層？', layerDeleted:'🗑️ 已刪除',
+    layerNone:'尚未有任何圖層。',
+    undoB:'↩️ 復原', clearPageMine:'🧹 清除本頁我的',
+    nothingMine:'本頁沒有弓法', clearPageOk:'✅ 已清除',
+    clearAllL:'👑 清除全頁弓法＋文字', clearAllOk:'👑 已清除全頁（含文字）',
+    nothingUndo:'沒有可復原', undoOk:'↩️ 已復原一筆',
+    eraseOk:'🧽 已刪除',
+    notYours:'🚫 此筆由「{n}」繪製（僅總監可刪除）',
+    chiefErased:'👑 已刪除「{n}」的弓法',
+    textNotYours:'🚫 此文字由「{n}」撰寫（僅總監可修改）',
+    chiefExit:'退出總監模式？',
+    clearMineT:'🧹 清除本頁我的', clearAllT:'👑 清除全頁弓法與文字',
+    clearMineBody:'您在<b>第 {p} 頁</b>的 <b>{n} 筆</b>將被刪除。',
+    clearAllBody:'<b>第 {p} 頁</b>的 <b>{n} 筆</b>弓法將全部刪除。',
+    clearAllTxtBody:'文字標註 <b>{m}</b> 個亦會一併刪除。',
+    clearUndoHint:'💡 30 秒內可復原（弓法與文字都救得返）。',
+    clearGoAll:'✅ 清除全頁', clearGoMine:'✅ 清除我的',
+    clearCancel:'✋ 取消',
+    undoClearedOk:'↩️ 已復原', undoClearedFail:'⚠️ 部分復原失敗',
+    thickLabel:'筆尖粗細（0.5–12px）', stampLabel:'Π/V 大小（×0.3–3）', done:'完成',
+    addText:'📝 新增文字', editText:'📝 編輯文字',
+    textPlaceholder:'輸入文字…（Enter 換行）',
+    textSizeLabel:'字體大小', textColorLabel:'顏色',
+    textSave:'✅ 儲存', textCancel:'取消', textDel:'🗑️ 刪除',
+    textSaved:'✅ 已新增', textUpdated:'✅ 已更新', textDeleted:'🗑️ 已刪除',
+    textMovedOk:'✅ 已移動', textNeedContent:'請輸入文字',
+    textHint:'💡 📝 工具：點空白新增、點文字編輯、拖曳移動。',
+    confirmDelText:'刪除此文字？',
+    printB:'🖨️ 列印', printTitle:'🖨️ 列印／匯出',
+    printLayer:'內容', both:'弓法 + 文字', bowOnly:'僅弓法',
+    textOnly:'僅文字', clean:'乾淨原譜',
+    printScope:'範圍', curPage:'當前頁', allPages:'整份',
+    genPrint:'🖨️ 列印', exportB:'⬇️ 匯出 PDF',
+    printing:'產生中…', exportDone:'✅ 已下載', close:'關閉',
+    loadFail:'載入失敗', noPdfLib:'⚠️ PDF 元件未載入',
+    fsBtn:'⛶ 全螢幕', fsExit:'✕ 退出全螢幕', helpTitle:'📖 使用說明',
+    sysAdmin:'⚙️ 系統管理（總監）',
+    sysDesc:'更改全團密碼、清除名額。',
+    setGatePw:'🔑 進站密碼', setEditPw:'🔑 編輯密碼',
+    setAdminPw:'🔑 譜務密碼', clearSlots:'🧹 清除全部名額',
+    askNewPw:'新密碼（至少 4 字元）：',
+    pwTooShort:'❌ 至少 4 字元', pwChanged:'✅ 已更改',
+    slotsCleared:'✅ 已清除',
+    libLogin:'🛡️ 總監登入（檔案管理 / 上載）'
+  },
+  en: {
+    appTitle:'🎼 Orchestra Stand',
+    gateLock:'🔒', gateTitle:'Orchestra Stand',
+    gateDesc:'Members only.\nEnter the gate password:',
+    gatePh:'Gate password', gateEnter:'Enter', gateWrong:'❌ Wrong gate password',
+    adminSection:'🔐 Librarian PDF Admin (Chief)', adminOk:'✅ Chief enabled',
+    uploadBtn:'📄 Upload PDFs here (batch)',
+    uploadDone:'✅ Uploaded', uploading:'Uploading',
+    broadcast:'📻 Broadcast', stopB:'⏹️ Stop broadcast', stopOk:'✅ Stopped',
+    liveBtnOn:'⏹️ Stop broadcast', liveBtnOff:'📻 Broadcast this',
+    liveBtnOther:'📻 Switch broadcast here',
+    startConfirm:'Broadcast this score to everyone?',
+    stopConfirm:'Stop broadcasting?',
+    liveTag:'📻 Live', liveBadge:'● LIVE',
+    confirmDel:'Delete "{t}"?',
+    noScores:'Empty folder. Chief can upload or create folders.',
+    backLib:'← Back', noBroadcast:'No broadcast now',
+    goLib:'Library', masterPage:'Master', jumpMaster:'⇢ Jump to master',
+    wrongPw:'❌ Wrong password', startOk:'📻 Broadcasting', delOk:'✅ Deleted',
+    pwPrompt:'Edit password (become leader):',
+    adminPwPrompt:'Librarian password (become Chief):',
+    needAdmin:'❌ Chief required (enable via role menu)',
+    needEdit:'Become leader or Chief first (role menu)',
+    askName:'Your name (public, never a password):',
+    nameUnsafe:'⚠️ Name must not contain password:', nameSet:'✅ Name: {n}',
+    viewBtn:'👁️ View', viewTag:'👁️ Viewing',
+    liveNow:'📻 Live', goLive:'📺 Watch',
+    roleBtn:'My role',
+    roleMember:'👤 Member', roleMemberDesc:'View scores, notices, follow broadcast',
+    roleCo:'🤝 Leader · co-edit', roleCoDesc:'Edit any score & layers; turns not broadcast',
+    roleMaster:'👑 Leader · master', roleMasterDesc:'Edit any score; turns broadcast to all',
+    roleChief:'🛡️ Chief', roleChiefDesc:'Full power: edit, files, admin',
+    becomeLeader:'✍️ Become leader', becomeAdmin:'🛡️ Become Chief',
+    exitRole:'🚪 Exit role (back to member)',
+    exitRoleConfirm:'Exit current role?',
+    exitedRole:'✅ Exited — member now',
+    logout:'🚪 Logout (clear gate)',
+    logoutConfirm:'Logout? Gate password needed next time.',
+    rename:'✏️ Rename self', takeover:'👑 Take over master', takeoverOk:'👑 Master now',
+    claimOk1:'👑 Master (1/2)', claimOk2:'🤝 Co-edit (2/2)',
+    editorsFull:'⚠️ Already 2 leaders online', slotLost:'⚠️ Slot lost — re-enable',
+    chiefOk:'🛡️ Chief enabled',
+    liveStatusNone:'📭 No broadcast',
+    liveStatusOn:'📻 Broadcasting: ',
+    roleStopLive:'⏹️ Stop broadcast',
+    roleStartLive:'📻 Broadcast this score',
+    rootName:'🏠 Library',
+    fmTitle:'⋯ Actions', fmOpen:'📂 Open', fmView:'👁️ View', fmBroadcast:'📻 Broadcast',
+    fmRename:'✏️ Rename', fmCut:'✂️ Cut', fmCopy:'📄 Copy',
+    fmDelete:'🗑️ Delete', fmCancel:'✋ Cancel',
+    clipCut:'✂️ Cut: {n} (paste in target)',
+    clipCopy:'📄 Copied: {n} (paste in target)',
+    pasteB:'📋 Paste', pasteHere:'Paste into: {p}',
+    pasteOk:'✅ Pasted', newFolder:'➕ New folder',
+    folderNameAsk:'Folder name:', folderCreated:'✅ Created',
+    folderNotEmpty:'❌ Folder not empty',
+    badTarget:'❌ Cannot move into itself',
+    renameAsk:'New name:', renameOk:'✅ Renamed',
+    renameAskFolder:'New folder name:',
+    tabLibrary:'📚 Library', tabAnn:'📢 Notices',
+    annAdd:'➕ New notice', annEmpty:'No notices yet.',
+    annNewTitle:'➕ New notice', annEditTitle:'✏️ Edit notice',
+    annPhTitle:'Title', annPhBody:'Content… (line breaks OK)',
+    annPin:'📌 Pin to top',
+    annSave:'✅ Save', annCancel:'Cancel',
+    annSaved:'✅ Saved', annDeleted:'🗑️ Deleted',
+    annConfirmDel:'Delete this notice?', annEdited:'edited',
+    annNeedContent:'Enter a title or content',
+    grpView:'📄 View & Broadcast',
+    grpEdit:'✍️ Bowing tools (leaders / chief)',
+    grpChief:'👑 Chief tools',
+    hintT:'📱 Quick start',
+    hint1:'<b>Pages</b>: tap sides, swipe, or ◀ ▶',
+    hint2:'<b>Zoom</b>: pinch; 🔍 resets',
+    hint3:'<b>Role</b>: top right — enable leader (edit) / chief / logout',
+    hint4:'<b>Edit</b>: finger / stylus / mouse all draw with the same width; draggable 🛠️ FAB → ↩️/🧽/🧹; hold S Pen button = instant erase',
+    hint5:'<b>Broadcast</b>: tap 📻 to sync everyone; status & stop live in the role menu',
+    layersB:'🗂️ Layers', layerTitle:'🗂️ Layer compare',
+    layerBase:'Original (no overlay)', layerAlphaLabel:'Layer opacity',
+    layerHint:'💡 One layer at a time. Not in print/export.',
+    layerUpload:'⬆️ Upload layer',
+    layerNameAsk:'Layer name (public):',
+    layerUploaded:'✅ Uploaded',
+    layerPageMismatch:'❌ Page mismatch ({a}p vs {b}p)',
+    layerDelConfirm:'Delete layer?', layerDeleted:'🗑️ Deleted',
+    layerNone:'No layers.',
+    undoB:'↩️ Undo', clearPageMine:'🧹 Clear mine',
+    nothingMine:'No strokes', clearPageOk:'✅ Cleared',
+    clearAllL:'👑 Clear all (bowings + text)', clearAllOk:'👑 Page cleared (incl. texts)',
+    nothingUndo:'Nothing to undo', undoOk:'↩️ Removed',
+    eraseOk:'🧽 Erased',
+    notYours:'🚫 By "{n}" (Chief only)',
+    chiefErased:'👑 Erased "{n}"',
+    textNotYours:'🚫 By "{n}" (Chief only)',
+    chiefExit:'Exit Chief mode?',
+    clearMineT:'🧹 Clear mine (page)', clearAllT:'👑 Clear all bowings & texts',
+    clearMineBody:'Your <b>{n}</b> strokes on page {p} will be deleted.',
+    clearAllBody:'<b>{n}</b> strokes on page {p} will ALL be deleted.',
+    clearAllTxtBody:'<b>{m}</b> text note(s) will also be deleted.',
+    clearUndoHint:'💡 Undo within 30s (strokes & texts both restorable).',
+    clearGoAll:'✅ Clear all', clearGoMine:'✅ Clear mine',
+    clearCancel:'✋ Cancel',
+    undoClearedOk:'↩️ Restored', undoClearedFail:'⚠️ Restore failed',
+    thickLabel:'Thickness (0.5–12px)', stampLabel:'Π/V size (×0.3–3)', done:'Done',
+    addText:'📝 Add text', editText:'📝 Edit text',
+    textPlaceholder:'Type… (Enter = newline)',
+    textSizeLabel:'Size', textColorLabel:'Color',
+    textSave:'✅ Save', textCancel:'Cancel', textDel:'🗑️ Delete',
+    textSaved:'✅ Added', textUpdated:'✅ Updated', textDeleted:'🗑️ Deleted',
+    textMovedOk:'✅ Moved', textNeedContent:'Type text',
+    textHint:'💡 📝: tap empty to add, tap to edit, drag to move.',
+    confirmDelText:'Delete?',
+    printB:'🖨️ Print', printTitle:'🖨️ Print / Export',
+    printLayer:'Content', both:'Bowings + text', bowOnly:'Bowings',
+    textOnly:'Text', clean:'Clean original',
+    printScope:'Range', curPage:'Current', allPages:'Whole',
+    genPrint:'🖨️ Print', exportB:'⬇️ Export PDF',
+    printing:'Preparing…', exportDone:'✅ Downloaded', close:'Close',
+    loadFail:'Load failed', noPdfLib:'⚠️ PDF lib missing',
+    fsBtn:'⛶ Fullscreen', fsExit:'✕ Exit fullscreen', helpTitle:'📖 Guide',
+    sysAdmin:'⚙️ System admin (Chief)',
+    sysDesc:'Change passwords, clear slots.',
+    setGatePw:'🔑 Gate', setEditPw:'🔑 Edit',
+    setAdminPw:'🔑 Librarian', clearSlots:'🧹 Clear slots',
+    askNewPw:'New password (min 4):',
+    pwTooShort:'❌ Min 4 chars', pwChanged:'✅ Changed',
+    slotsCleared:'✅ Cleared',
+    libLogin:'🛡️ Chief sign-in (file manage / upload)'
+  }
+};
+let lang = localStorage.getItem('app_lang') || 'zh';
+function t(k, vars){
+  let s = (I18N[lang] && I18N[lang][k]) || I18N.zh[k] || k;
+  if(vars) for(const key in vars) s = s.replace('{'+key+'}', vars[key]);
+  return s;
+}
+function toggleLang(){
+  lang = (lang === 'zh') ? 'en' : 'zh';
+  localStorage.setItem('app_lang', lang);
+  if(gatePassed()) route(); else renderGate();
+}
+
+/* ================= 狀態 ================= */
+const state = {
+  adminPw: localStorage.getItem('adminPw') || '',
+  editPw:  localStorage.getItem('editPw') || '',
+  isEditor: false, editorSlot: null, isBroadcaster: false,
+  masterName: '', hbTimer: null,
+  isChief: false,
+  myName: localStorage.getItem('drawerName') || '',
+  homeTab: 'library',
+  anns: [],
+  scores: [], folders: [], currentFolder: null,
+  clip: JSON.parse(localStorage.getItem('orch_clip') || 'null'),
+  liveScoreId: null,
+  isLiveHere: false,
+  broadcastTitle: '',
+  pdf: null, pdfScoreId: null, numPages: 0, currentPage: 1, masterPage: 1,
+  zoom: 1, fsMode: false, viewMode: false,
+  tool: null, dash: false, drawColor: 'red',
+  thick: parseFloat(localStorage.getItem('penThick')) || 3,
+  stampScale: parseFloat(localStorage.getItem('stampScale')) || 1,
+  textColor: localStorage.getItem('textColorKey') || 'black',
+  textSize: parseFloat(localStorage.getItem('textSize')) || 24,
+  strokes: [], texts: [], _drawingNow: false,
+  _tempErase: false, _preEraseTool: null,
+  layers: [], layerSel: null,
+  layerAlpha: parseFloat(localStorage.getItem('layerAlpha')) || 0.55,
+  _vp: null
+};
+const layerDocs = new Map();
+let lastPenDown = 0;
+
+/* ================= 權限 ================= */
+function isAdmin(){ return state.isChief; }
+function canEdit(){ return state.isEditor || state.isChief; }
+function epw(){ return state.editPw || state.adminPw || ''; }
+
+/* ================= 小工具 ================= */
+const $ = id => document.getElementById(id);
+function esc(s){ return String(s??'').replace(/[&<>"']/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+let toastTimer;
+function toast(msg){
+  const el = $('toast'); el.textContent = msg; el.style.display = 'block';
+  clearTimeout(toastTimer); toastTimer = setTimeout(()=> el.style.display='none', 2800);
+}
+function fmtSize(n){
+  if(!n) return '';
+  if(n > 1048576) return (n/1048576).toFixed(1)+' MB';
+  return Math.round(n/1024)+' KB';
+}
+function fmtTh(v){ return (v % 1 === 0) ? String(v) : v.toFixed(1); }
+function isWrongPw(err){ return err && String(err.message||'').includes('WRONG_PASSWORD'); }
+function dbErrMsg(err){
+  const m = String((err && err.message) || '');
+  if(isWrongPw(err)) return t('needAdmin');
+  if(m.includes('EDITORS_FULL')) return t('editorsFull');
+  if(m.includes('SLOT_LOST')) return t('slotLost');
+  if(m.includes('FOLDER_NOT_EMPTY')) return t('folderNotEmpty');
+  if(m.includes('BAD_TARGET')) return t('badTarget');
+  return (err && err.message) || 'Error';
+}
+function fitHeader(){
+  const h = document.querySelector('header');
+  if(h) document.documentElement.style.setProperty('--hh', h.offsetHeight + 'px');
+}
+function isMine(s){ return !!state.myName && String(s.drawer_name||'') === state.myName; }
+function ownerOf(s){ return s.drawer_name || '—'; }
+function parseStroke(s){
+  const m = String(s).match(/^(P|HL|DS|LN|LD|Π|V)?#([0-9a-fA-F]{3,8})(?:~([\d.]+))?(?:~([\d.]+))?$/);
+  if(!m) return { kind:'P', hex:'#ff5252', th:3, sc:1 };
+  return { kind:m[1]||'P', hex:'#'+m[2], th:parseFloat(m[3])||3, sc:parseFloat(m[4])||1 };
+}
+function encodeStroke(kind, hex, th, sc){
+  const pre = (kind === 'P') ? '' : kind;
+  if(kind === 'Π' || kind === 'V') return pre + hex + '~' + (th||3) + '~' + (sc||1);
+  return pre + hex + '~' + (th||3);
+}
+function guessColorKey(hex){
+  for(const k in COLORS)
+    if(COLORS[k].toLowerCase() === String(hex||'').toLowerCase()) return k;
+  return 'black';
+}
+function inViewerPage(){ return location.hash.startsWith('#/view'); }
+function isHome(){
+  return location.hash === '#/library' || location.hash === '' || location.hash === '#/';
+}
+function nameIsSafe(n){
+  const pws = [state.editPw, state.adminPw].filter(p => p && p.length >= 4);
+  return !pws.some(p => String(n||'').includes(p));
+}
+function askSafeName(defVal){
+  for(let i = 0; i < 3; i++){
+    const n = prompt(t('askName'), defVal || '');
+    if(n == null) return null;
+    const v = n.trim().slice(0, 24);
+    if(!v) return null;
+    if(!nameIsSafe(v)){ toast(t('nameUnsafe')); defVal = ''; continue; }
+    return v;
+  }
+  return null;
+}
+function gatePassed(){ return localStorage.getItem('gateOk') === '1'; }
+function closeAllPops(){
+  closeClearPop(); closeLayerPop(); closeRolePop(); closeFileMenu(); closeAnnModal();
+  toggleThickPop(false);
+  const tp=$('textPop'); if(tp) tp.style.display='none';
+  const pp=$('printPop'); if(pp) pp.style.display='none';
+}
+
+/* ================= S Pen 按鈕：暫時點擦 ================= */
+function setTempErase(on){
+  if(on){
+    if(state._tempErase || state.tool === 'erase') return;
+    if(!canEdit()) return;
+    state._tempErase = true;
+    state._preEraseTool = state.tool;
+    state.tool = 'erase';
+    applyTouchAction(); updateToolsUI();
+  }else{
+    if(!state._tempErase) return;
+    state._tempErase = false;
+    state.tool = state._preEraseTool;
+    state._preEraseTool = null;
+    applyTouchAction(); updateToolsUI();
+  }
+}
+
+/* ================= 路由 ================= */
+window.addEventListener('hashchange', () => { if(gatePassed()) route(); else renderGate(); });
+async function route(){
+  fitHeader(); closeAllPops();
+  if(location.hash.startsWith('#/view/')) await renderView(location.hash.split('/')[2]);
+  else if(location.hash.startsWith('#/help')) renderHelp();
+  else await renderHome();
+}
+
+/* ================= 進站 / 登出 ================= */
+function renderGate(){
+  $('appTitle').textContent = t('appTitle');
+  $('langBtn').textContent = (lang === 'zh') ? 'EN' : '中';
+  $('roleBtn').style.display = 'none';
+  $('view').innerHTML = `
+    <div id="gateWrap">
+      <div class="lock">${t('gateLock')}</div>
+      <h2>${t('gateTitle')}</h2>
+      <p>${t('gateDesc').replace(/\n/g,'<br>')}</p>
+      <div id="gateCard">
+        <input type="password" id="gateInput" placeholder="${t('gatePh')}"
+          onkeydown="if(event.key==='Enter')gateSubmit()">
+        <button class="btn primary" style="width:100%" onclick="gateSubmit()">${t('gateEnter')}</button>
+      </div>
+    </div>`;
+}
+async function gateSubmit(){
+  const v = ($('gateInput').value || '').trim();
+  if(!v) return;
+  try{
+    const { data, error } = await db.rpc('verify_gate_pw', { p_gate_pw: v });
+    if(error || !data){ toast(t('gateWrong')); return; }
+    localStorage.setItem('gateOk', '1');
+    $('roleBtn').style.display = 'inline-flex';
+    if(!location.hash) location.hash = '#/library';
+    route();
+  }catch(e){ toast(t('gateWrong')); }
+}
+function gateLogout(){
+  if(!confirm(t('logoutConfirm'))) return;
+  localStorage.removeItem('gateOk');
+  location.hash = '';
+  renderGate();
+}
+
+/* ================= 查廣播狀態 ================= */
+async function fetchBroadcast(){
+  try{
+    const r = await db.from('broadcast')
+      .select('*, score:scores(*)').eq('id', 1).single();
+    if(r.data && r.data.score)
+      return { score_id: r.data.score_id, title: r.data.score.title,
+               master_page: r.data.master_page || 1 };
+    return null;
+  }catch(e){ return null; }
+}
+
+/* ================= 主頁（樂譜庫 ⇄ 公告欄 分頁） ================= */
+async function renderHome(){
+  $('appTitle').textContent = t('appTitle');
+  $('langBtn').textContent = (lang === 'zh') ? 'EN' : '中';
+  updateRoleUI();
+  const tabs = `
+    <div class="homeTabs">
+      <button class="htab ${state.homeTab==='library'?'on':''}"
+        onclick="switchHomeTab('library')">📚 ${t('tabLibrary')}</button>
+      <button class="htab ${state.homeTab==='ann'?'on':''}"
+        onclick="switchHomeTab('ann')">📢 ${t('tabAnn')}</button>
+    </div>
+    <div id="homeBody"><div class="spinner"></div></div>`;
+  $('view').innerHTML = tabs;
+  if(state.homeTab === 'ann') await renderAnnBoard();
+  else await renderLibraryBody();
+}
+function switchHomeTab(tab){
+  if(state.homeTab === tab) return;
+  state.homeTab = tab;
+  renderHome();
+}
+
+/* ================= 公告欄 ================= */
+async function renderAnnBoard(){
+  let anns = [];
+  try{
+    const r = await db.from('announcements').select('*')
+      .order('pinned', { ascending:false })
+      .order('created_at', { ascending:false });
+    anns = r.data || [];
+  }catch(e){ anns = []; }
+  state.anns = anns;
+  let html = '';
+  if(canEdit()){
+    html += `<div class="row" style="margin-bottom:12px">
+      <button class="btn primary" onclick="openAnnModal(null)">➕ ${t('annAdd')}</button>
+    </div>`;
+  }
+  if(!anns.length){
+    html += `<div class="card center"><p>${t('annEmpty')}</p></div>`;
+  }
+  anns.forEach(a => {
+    const edited = a.updated_at && a.created_at &&
+      (new Date(a.updated_at).getTime() - new Date(a.created_at).getTime() > 1500);
+    html += `
+    <div class="card ${a.pinned ? 'annPinned' : ''}">
+      <h3>${a.pinned ? '📌 ' : ''}${esc(a.title || '—')}</h3>
+      <div class="annBody">${esc(a.body || '')}</div>
+      <div class="meta">✍️ ${esc(a.author || '—')} ·
+        ${new Date(a.created_at).toLocaleString()}${edited ? ' · ' + t('annEdited') : ''}</div>
+      ${canEdit() ? `<div class="row">
+        <button class="btn sm" onclick="openAnnModalById('${a.id}')">✏️ ${t('fmRename')}</button>
+        <button class="btn sm warn" onclick="deleteAnnouncement('${a.id}')">🗑️ ${t('fmDelete')}</button>
+      </div>` : ''}
+    </div>`;
+  });
+  const body = $('homeBody');
+  if(body) body.innerHTML = html;
+}
+let annEditingId = null;
+function openAnnModal(a){
+  if(!canEdit()){ toast(t('needEdit')); return; }
+  annEditingId = a ? a.id : null;
+  $('annPopTitle').textContent = a ? t('annEditTitle') : t('annNewTitle');
+  $('annTitleInput').value = a ? (a.title||'') : '';
+  $('annTitleInput').placeholder = t('annPhTitle');
+  $('annBodyInput').value = a ? (a.body||'') : '';
+  $('annBodyInput').placeholder = t('annPhBody');
+  $('annPinInput').checked = a ? !!a.pinned : false;
+  $('annPinLabel').textContent = t('annPin');
+  $('annCancelBtn').textContent = t('annCancel');
+  $('annSaveBtn').textContent = t('annSave');
+  $('annPop').style.display = 'block';
+  $('annOverlay').style.display = 'block';
+  setTimeout(()=>{ try{ $('annTitleInput').focus(); }catch(e){} }, 100);
+}
+function openAnnModalById(id){
+  const a = state.anns.find(x => x.id === id);
+  if(a) openAnnModal(a);
+}
+function closeAnnModal(){
+  const p = $('annPop'); if(p) p.style.display = 'none';
+  const o = $('annOverlay'); if(o) o.style.display = 'none';
+  annEditingId = null;
+}
+async function saveAnnouncement(){
+  const title = ($('annTitleInput').value||'').trim().slice(0,120);
+  const body = ($('annBodyInput').value||'').trim().slice(0,4000);
+  if(!title && !body){ toast(t('annNeedContent')); return; }
+  const pinned = $('annPinInput').checked;
+  if(annEditingId){
+    const { error } = await db.rpc('update_announcement', {
+      p_edit_pw: epw(), p_ann_id: annEditingId,
+      p_title: title, p_body: body, p_pinned: pinned });
+    if(error){ toast(dbErrMsg(error)); return; }
+  }else{
+    const { error } = await db.rpc('add_announcement', {
+      p_edit_pw: epw(), p_title: title, p_body: body,
+      p_author: state.myName || '', p_pinned: pinned });
+    if(error){ toast(dbErrMsg(error)); return; }
+  }
+  closeAnnModal();
+  toast(t('annSaved'));
+  renderAnnBoard();
+}
+async function deleteAnnouncement(id){
+  if(!canEdit()){ toast(t('needEdit')); return; }
+  if(!confirm(t('annConfirmDel'))) return;
+  const { error } = await db.rpc('delete_announcement',
+    { p_edit_pw: epw(), p_ann_id: id });
+  if(error){ toast(dbErrMsg(error)); return; }
+  toast(t('annDeleted'));
+  renderAnnBoard();
+}
+
+/* ================= 樂譜庫 ================= */
+function setClip(c){
+  state.clip = c;
+  if(c) localStorage.setItem('orch_clip', JSON.stringify(c));
+  else localStorage.removeItem('orch_clip');
+}
+async function renderLibraryBody(){
+  const live = await fetchBroadcast();
+  try{
+    const r = await db.from('folders').select('*').order('name');
+    state.folders = r.data || [];
+  }catch(e){ state.folders = []; }
+  try{
+    const r = await db.from('scores').select('*').order('created_at', { ascending:false });
+    state.scores = r.data || [];
+  }catch(e){ state.scores = []; }
+
+  const crumbs = [];
+  let cur = state.currentFolder;
+  while(cur){
+    const f = state.folders.find(x => x.id === cur);
+    if(!f) break;
+    crumbs.unshift(f);
+    cur = f.parent_id;
+  }
+  let crumbHtml = `<a onclick="crumbGo(null)">${t('rootName')}</a>`;
+  crumbs.forEach(f => {
+    crumbHtml += `<span class="sep">›</span><a onclick="crumbGo('${f.id}')">${esc(f.name)}</a>`;
+  });
+
+  const hereId = state.currentFolder;
+  const subFolders = state.folders.filter(f => (f.parent_id||null) === (hereId||null));
+  const scoresHere = state.scores.filter(s => (s.folder_id||null) === (hereId||null));
+
+  function countDesc(f){
+    let n = 0;
+    state.folders.filter(x => x.parent_id === f.id)
+      .forEach(x => { n += 1 + countDesc(x); });
+    n += state.scores.filter(s => s.folder_id === f.id).length;
+    return n;
+  }
+
+  const folderCards = subFolders.map(f => `
+    <div class="card" data-fid="${f.id}">
+      <h3>📁 ${esc(f.name)}
+        <span class="meta" style="display:inline;margin-left:6px">${countDesc(f)} 項</span></h3>
+      <div class="row">
+        <button class="btn sm primary" onclick="crumbGo('${f.id}')">${t('fmOpen')}</button>
+        <button class="btn sm" onclick="openFolderMenu('${f.id}')">⋯</button>
+      </div>
+    </div>`).join('');
+
+  const scoreCards = scoresHere.map(s => {
+    const isLive = live && live.score_id === s.id;
+    return `
+    <div class="card" data-sid="${s.id}">
+      <h3>🎼 ${esc(s.title)}
+        ${isLive ? ` <span class="badge live-gold">${t('liveTag')}</span>` : ''}</h3>
+      <div class="meta">${new Date(s.created_at).toLocaleDateString()} ·
+        ${s.page_count||'?'}p · ${fmtSize(s.file_size)}</div>
+      <div class="row">
+        <a class="btn sm" style="text-decoration:none" href="#/view/${s.id}">${t('viewBtn')}</a>
+        ${isLive ? `<a class="btn sm gold" style="text-decoration:none" href="#/view/${s.id}">${t('goLive')}</a>` : ''}
+        <button class="btn sm" onclick="openScoreMenu('${s.id}')">⋯</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  let empty = '';
+  if(!subFolders.length && !scoresHere.length) empty = `
+    <div class="card center"><p>${t('noScores')}</p></div>`;
+
+  let clipHtml = '';
+  if(state.clip){
+    const mode = state.clip.mode === 'cut' ? '✂️' : '📄';
+    clipHtml = `<div class="clipInfo">${mode} ${esc(state.clip.name)}
+      <button class="btn sm" style="margin-left:8px" onclick="setClip(null);renderHome()">✕</button>
+    </div>`;
+  }
+  let adminBar = '';
+  if(isAdmin()){
+    const pasteDisabled = state.clip ? '' : 'disabled';
+    const target = crumbs.length ? crumbs[crumbs.length-1].name : t('rootName');
+    adminBar = `
+    <div class="row" style="margin-bottom:12px">
+      <button class="btn sm" onclick="createFolderUI()">${t('newFolder')}</button>
+      <button class="btn sm gold" ${pasteDisabled}
+        onclick="pasteClip()">${t('pasteB')}（${t('pasteHere',{p:esc(target)})}）</button>
+    </div>`;
+  }
+
+  const liveBanner = live ? `
+    <div id="liveBanner">
+      <div class="txt"><b>${t('liveNow')}</b><br>🎼 ${esc(live.title)}</div>
+      <a class="btn gold" style="text-decoration:none" href="#/view/${live.score_id}">${t('goLive')}</a>
+    </div>` : '';
+
+  let adminHtml;
+  if(isAdmin()){
+    adminHtml = `
+    <div class="card">
+      <h3>${t('adminSection')}</h3>
+      <div class="meta">${t('adminOk')}</div>
+      <input type="file" id="fileInput" accept="application/pdf" multiple style="display:none"
+        onchange="handleFiles(this.files)">
+      <button class="btn primary" style="width:100%"
+        onclick="document.getElementById('fileInput').click()">${t('uploadBtn')}</button>
+      <div class="meta" id="uploadProgress" style="margin-top:8px"></div>
+    </div>
+    <details>
+      <summary>${t('sysAdmin')}</summary>
+      <div>
+        ${t('sysDesc')}<br>
+        <div class="row" style="margin-top:8px">
+          <button class="btn sm" onclick="sysChangePw('gate')">${t('setGatePw')}</button>
+          <button class="btn sm" onclick="sysChangePw('edit')">${t('setEditPw')}</button>
+          <button class="btn sm" onclick="sysChangePw('admin')">${t('setAdminPw')}</button>
+          <button class="btn sm warn" onclick="sysClearSlots()">${t('clearSlots')}</button>
+        </div>
+      </div>
+    </details>`;
+  }else{
+    adminHtml = `
+    <div class="card">
+      <button class="btn gold" style="width:100%" onclick="roleBecomeAdmin()">${t('libLogin')}</button>
+    </div>`;
+  }
+
+  const body = $('homeBody');
+  if(body) body.innerHTML = liveBanner + adminHtml +
+    `<div id="crumbs">${crumbHtml}</div>` + clipHtml + adminBar +
+    folderCards + scoreCards + empty;
+  bindLongPress();
+}
+function crumbGo(id){ state.currentFolder = id; renderHome(); }
+
+function bindLongPress(){
+  let lpTimer = null;
+  const bind = (el, fn) => {
+    const start = () => { lpTimer = setTimeout(fn, 550); };
+    const cancel = () => { if(lpTimer){ clearTimeout(lpTimer); lpTimer = null; } };
+    el.addEventListener('contextmenu', e => { e.preventDefault(); fn(); });
+    el.addEventListener('touchstart', start, { passive:true });
+    el.addEventListener('touchmove', cancel, { passive:true });
+    el.addEventListener('touchend', cancel);
+    el.addEventListener('touchcancel', cancel);
+  };
+  document.querySelectorAll('[data-sid]').forEach(el =>
+    bind(el, () => openScoreMenu(el.dataset.sid)));
+  document.querySelectorAll('[data-fid]').forEach(el =>
+    bind(el, () => openFolderMenu(el.dataset.fid)));
+}
+
+function menuHtml(items){
+  $('fileMenuBody').innerHTML = items.map(i =>
+    `<button class="menuBtn ${i.danger?'danger':''}" ${i.dis?'disabled':''}
+      onclick="${i.fn}">${i.label}</button>`).join('');
+  $('fileMenuCancel').textContent = t('fmCancel');
+  $('fileMenuPop').style.display = 'block';
+  $('fileMenuOverlay').style.display = 'block';
+}
+function closeFileMenu(){
+  $('fileMenuPop').style.display = 'none';
+  $('fileMenuOverlay').style.display = 'none';
+}
+function openScoreMenu(id){
+  const s = state.scores.find(x => x.id === id);
+  if(!s) return;
+  $('fileMenuTitle').textContent = '🎼 ' + s.title.slice(0, 30);
+  const items = [
+    { label:t('fmView'), fn:`closeFileMenu();location.hash='#/view/${id}'` }
+  ];
+  if(canEdit()){
+    items.push({ label:t('fmBroadcast'), fn:`closeFileMenu();startBroadcast('${id}')` });
+  }
+  if(isAdmin()){
+    items.push(
+      { label:t('fmRename'), fn:`closeFileMenu();renameScore('${id}')` },
+      { label:t('fmCut'), fn:`closeFileMenu();clipScore('${id}','cut')` },
+      { label:t('fmCopy'), fn:`closeFileMenu();clipScore('${id}','copy')` },
+      { label:t('fmDelete'), fn:`closeFileMenu();doDelete('${id}')`, danger:true });
+  }
+  menuHtml(items);
+}
+function openFolderMenu(id){
+  const f = state.folders.find(x => x.id === id);
+  if(!f) return;
+  $('fileMenuTitle').textContent = '📁 ' + f.name.slice(0, 30);
+  const items = [
+    { label:t('fmOpen'), fn:`closeFileMenu();crumbGo('${id}')` }
+  ];
+  if(isAdmin()){
+    items.push(
+      { label:t('fmRename'), fn:`closeFileMenu();renameFolder('${id}')` },
+      { label:t('fmCut'), fn:`closeFileMenu();clipFolder('${id}')` },
+      { label:t('fmDelete'), fn:`closeFileMenu();deleteFolder('${id}')`, danger:true });
+  }
+  menuHtml(items);
+}
+
+async function renameScore(id){
+  const s = state.scores.find(x => x.id === id);
+  const nt = (prompt(t('renameAsk'), (s && s.title) || '') || '').trim().slice(0, 120);
+  if(!nt || nt === (s && s.title)) return;
+  const { error } = await db.rpc('rename_score',
+    { p_admin_pw: state.adminPw, p_score_id: id, p_title: nt });
+  if(error){ toast(dbErrMsg(error)); return; }
+  toast(t('renameOk')); renderHome();
+}
+async function renameFolder(id){
+  const f = state.folders.find(x => x.id === id);
+  const nt = (prompt(t('renameAskFolder'), (f && f.name) || '') || '').trim().slice(0, 60);
+  if(!nt || nt === (f && f.name)) return;
+  const { error } = await db.rpc('folder_rename',
+    { p_admin_pw: state.adminPw, p_folder_id: id, p_name: nt });
+  if(error){ toast(dbErrMsg(error)); return; }
+  toast(t('renameOk')); renderHome();
+}
+function clipScore(id, mode){
+  const s = state.scores.find(x => x.id === id);
+  if(!s) return;
+  setClip({ type:'score', mode, id, name:s.title });
+  toast(t(mode === 'cut' ? 'clipCut' : 'clipCopy', { n:s.title }));
+}
+function clipFolder(id){
+  const f = state.folders.find(x => x.id === id);
+  if(!f) return;
+  setClip({ type:'folder', mode:'cut', id, name:f.name });
+  toast(t('clipCut', { n:f.name }));
+}
+async function pasteClip(){
+  const c = state.clip;
+  if(!c || !isAdmin()) return;
+  const target = state.currentFolder;
+  if(c.type === 'score'){
+    if(c.mode === 'copy'){
+      const { error } = await db.rpc('copy_score',
+        { p_admin_pw: state.adminPw, p_score_id: c.id, p_folder_id: target });
+      if(error){ toast(dbErrMsg(error)); return; }
+    }else{
+      const { error } = await db.rpc('move_score_to',
+        { p_admin_pw: state.adminPw, p_score_id: c.id, p_folder_id: target });
+      if(error){ toast(dbErrMsg(error)); return; }
+      setClip(null);
+    }
+  }else{
+    if(c.id === target){ toast(t('badTarget')); return; }
+    const { error } = await db.rpc('folder_move',
+      { p_admin_pw: state.adminPw, p_folder_id: c.id, p_new_parent_id: target });
+    if(error){ toast(dbErrMsg(error)); return; }
+    setClip(null);
+  }
+  toast(t('pasteOk'));
+  renderHome();
+}
+async function createFolderUI(){
+  const name = (prompt(t('folderNameAsk')) || '').trim().slice(0, 60);
+  if(!name) return;
+  const { error } = await db.rpc('folder_create',
+    { p_admin_pw: state.adminPw, p_name: name, p_parent_id: state.currentFolder });
+  if(error){ toast(dbErrMsg(error)); return; }
+  toast(t('folderCreated'));
+  renderHome();
+}
+async function deleteFolder(id){
+  const f = state.folders.find(x => x.id === id);
+  if(!confirm(t('confirmDel', { t: f ? f.name : '' }))) return;
+  const { error } = await db.rpc('folder_delete',
+    { p_admin_pw: state.adminPw, p_folder_id: id });
+  if(error){ toast(dbErrMsg(error)); return; }
+  toast(t('delOk'));
+  renderHome();
+}
+
+async function sysChangePw(kind){
+  const np = prompt(t('askNewPw'));
+  if(!np) return;
+  if(np.length < 4){ toast(t('pwTooShort')); return; }
+  const fn = kind === 'gate' ? 'set_gate_password'
+    : kind === 'edit' ? 'set_edit_password' : 'set_admin_password';
+  const { error } = await db.rpc(fn, { p_admin_pw: state.adminPw, p_new: np });
+  if(error){ toast(dbErrMsg(error)); return; }
+  if(kind === 'admin'){
+    state.adminPw = np;
+    localStorage.setItem('adminPw', np);
+  }
+  toast(t('pwChanged'));
+}
+async function sysClearSlots(){
+  if(!confirm(t('clearSlots') + ' ?')) return;
+  const { error } = await db.rpc('clear_editors', { p_admin_pw: state.adminPw });
+  toast(error ? dbErrMsg(error) : t('slotsCleared'));
+}
+
+async function handleFiles(files){
+  if(!files || files.length === 0) return;
+  const prog = $('uploadProgress');
+  const total = files.length;
+  for(let i = 0; i < total; i++){
+    const f = files[i];
+    prog.textContent = `⏳ ${t('uploading')} (${i+1}/${total}): ${f.name}`;
+    try{
+      const buf = new Uint8Array(await f.arrayBuffer());
+      const doc = await pdfjsLib.getDocument({ data: buf }).promise;
+      const pageCount = doc.numPages; doc.destroy();
+      const safeName = f.name.replace(/[^\w.\-\u4e00-\u9fa5]/g, '_');
+      const path = Date.now() + '_' + safeName;
+      const up = await db.storage.from('scores').upload(path, f,
+        { contentType:'application/pdf', upsert:false });
+      if(up.error) throw up.error;
+      const r = await db.rpc('create_score_ex', {
+        p_admin_pw: state.adminPw,
+        p_title: f.name.replace(/\.pdf$/i, '').slice(0,120),
+        p_file_path: path, p_file_size: f.size, p_page_count: pageCount,
+        p_folder_id: state.currentFolder });
+      if(r.error){
+        db.storage.from('scores').remove([path]);
+        throw r.error;
+      }
+    }catch(err){
+      if(isWrongPw(err)){ toast(t('needAdmin')); return; }
+      toast('Error: '+err.message);
+    }
+  }
+  prog.textContent = t('uploadDone');
+  toast(t('uploadDone'));
+  setTimeout(renderHome, 800);
+}
+
+async function doDelete(id){
+  const s = state.scores.find(x => x.id === id);
+  if(!confirm(t('confirmDel', { t: s ? s.title : '' }))) return;
+  const { error } = await db.rpc('delete_score',
+    { p_admin_pw: state.adminPw, p_score_id: id });
+  if(error){ toast(dbErrMsg(error)); return; }
+  if(s && s.file_path){
+    try{
+      const r = await db.from('scores').select('id')
+        .eq('file_path', s.file_path);
+      if(!r.data || r.data.length === 0){
+        await db.storage.from('scores').remove([s.file_path]);
+      }
+    }catch(e){}
+  }
+  toast(t('delOk'));
+  renderHome();
+}
+
+/* ================= 廣播控制 ================= */
+async function startBroadcast(id){
+  if(!canEdit()){ toast(t('needEdit')); openRolePop(); return; }
+  if(!confirm(t('startConfirm'))) return;
+  const { error } = await db.rpc('start_broadcast',
+    { p_edit_pw: epw(), p_score_id: id });
+  if(error){ toast(dbErrMsg(error)); return; }
+  toast(t('startOk'));
+  if(location.hash === '#/view/'+id) await applyBroadcastState();
+  else location.hash = '#/view/'+id;
+}
+async function stopBroadcastLive(){
+  if(!canEdit()){ toast(t('needEdit')); return; }
+  if(!confirm(t('stopConfirm'))) return;
+  const { error } = await db.rpc('stop_broadcast', { p_edit_pw: epw() });
+  if(error){ toast(dbErrMsg(error)); return; }
+  toast(t('stopOk'));
+  if(inViewerPage()) await applyBroadcastState();
+  if(isHome()) renderHome();
+}
+
+/* ================= 檢視頁 ================= */
+async function renderView(scoreId){
+  $('appTitle').textContent = t('appTitle');
+  $('langBtn').textContent = (lang === 'zh') ? 'EN' : '中';
+  state.tool = null; state.dash = false; state.viewMode = false;
+  state.liveScoreId = scoreId;
+  state.strokes = []; state.texts = [];
+  closeAllPops();
+
+  let score = null;
+  try{
+    const r = await db.from('scores').select('*').eq('id', scoreId).single();
+    score = r.data;
+  }catch(e){}
+  if(!score){
+    $('view').innerHTML = `<div class="card center" style="margin-top:40px">
+      <p>⚠️ ${t('loadFail')}</p>
+      <a class="btn primary" style="text-decoration:none" href="#/library">${t('backLib')}</a>
+    </div>`;
+    return;
+  }
+
+  await applyBroadcastState();
+
+  $('view').innerHTML = `
+    <div class="viewer">
+      <div class="vtop">
+        <a class="pill" href="#/library" style="text-decoration:none">${t('backLib')}</a>
+        <div class="title">${esc(score.title)}</div>
+        <span class="badge" id="liveBadge" style="display:none"></span>
+      </div>
+      <div class="grp open" id="grpView">
+        <button class="ghead" onclick="toggleGroup('grpView')">
+          <span>${t('grpView')}</span><span class="arr">▾</span></button>
+        <div class="gbody">
+          <button class="tbtn" id="bcastBtn" style="display:none" onclick="bcastBtnTap()"></button>
+          <button class="tbtn" id="jumpBtn" style="display:none"
+            onclick="jumpToMaster()">${t('jumpMaster')}</button>
+          <button class="tbtn" id="zoomBtn" onclick="resetZoom()">🔍 1×</button>
+          <button class="tbtn" onclick="toggleFullscreen()">${t('fsBtn')}</button>
+          <button class="tbtn" id="layerBtn" onclick="openLayerPop()">${t('layersB')}</button>
+          <button class="tbtn" onclick="openPrintPop()">${t('printB')}</button>
+        </div>
+      </div>
+      <div class="grp" id="grpEdit">
+        <button class="ghead" onclick="toggleGroup('grpEdit')">
+          <span>${t('grpEdit')}</span><span class="arr">▾</span></button>
+        <div class="gbody" id="toolsRow">
+          <button class="tbtn" id="modePen" onclick="setTool('pen')">✍️</button>
+          <button class="tbtn" id="modeHl" onclick="setTool('hl')">🖍️</button>
+          <button class="tbtn" id="modeDash" onclick="toggleDash()">┄</button>
+          <button class="tbtn" id="modeLine" onclick="setTool('line')">╱</button>
+          <button class="tbtn" id="modePD" onclick="setTool('stampDown')" style="font-weight:700">Π</button>
+          <button class="tbtn" id="modePU" onclick="setTool('stampUp')" style="font-weight:700">V</button>
+          <button class="tbtn" id="modeEr" onclick="setTool('erase')">🧽</button>
+          <button class="tbtn" id="modeTx" onclick="setTool('text')">📝</button>
+          <button class="tbtn" id="thickBtn" onclick="toggleThickPop()">●<span id="thickVal" style="font-size:11px;margin-left:2px">3</span></button>
+          <button class="swatch" data-c="red" onclick="setDrawColor('red')"><span style="background:#ff5252"></span></button>
+          <button class="swatch" data-c="blue" onclick="setDrawColor('blue')"><span style="background:#4da3ff"></span></button>
+          <button class="swatch" data-c="green" onclick="setDrawColor('green')"><span style="background:#3ddc84"></span></button>
+          <button class="swatch" data-c="orange" onclick="setDrawColor('orange')"><span style="background:#ffb648"></span></button>
+          <button class="swatch" data-c="black" onclick="setDrawColor('black')"><span style="background:#1c1c1c"></span></button>
+          <button class="swatch" data-c="white" onclick="setDrawColor('white')"><span style="background:#fff;border:1px solid #c8d2dc"></span></button>
+          <button class="tbtn" onclick="undoStroke()">${t('undoB')}</button>
+          <button class="tbtn" onclick="openClearConfirm('mine')">${t('clearPageMine')}</button>
+        </div>
+      </div>
+      <div class="grp" id="grpChief" style="display:none">
+        <button class="ghead" onclick="toggleGroup('grpChief')">
+          <span>${t('grpChief')}</span><span class="arr">▾</span></button>
+        <div class="gbody">
+          <button class="tbtn" style="border-color:var(--danger)"
+            onclick="openClearConfirm('all')">${t('clearAllL')}</button>
+        </div>
+      </div>
+      <div id="stage"><div class="spinner"></div></div>
+      <button class="pill" id="fsExit" onclick="toggleFullscreen()">${t('fsExit')}</button>
+      <div id="fabDock">
+        <div class="fabActions" id="fabActions">
+          <button class="fabMini" onclick="fabUndoTap()" title="Undo">↩️</button>
+          <button class="fabMini" id="fabErase" onclick="fabEraseTap()" title="Erase">🧽</button>
+          <button class="fabMini" onclick="fabClearTap()" title="Clear mine">🧹</button>
+        </div>
+        <button id="fab">🛠️</button>
+      </div>
+      <div class="pop" id="thickPop">
+        <div style="font-size:12px;color:var(--muted)">${t('thickLabel')}</div>
+        <input type="range" id="thickRange" min="0.5" max="12" step="0.5">
+        <canvas id="thickPrev" width="220" height="28" style="width:100%;background:#fff;border-radius:6px"></canvas>
+        <div class="plabel">${t('stampLabel')} <span id="stampVal">×1.0</span></div>
+        <input type="range" id="stampRange" min="0.3" max="3" step="0.1">
+        <canvas id="stampPrev" width="220" height="52" style="width:100%;background:#fff;border-radius:6px"></canvas>
+        <div class="row" style="margin-top:8px;justify-content:flex-end">
+          <button class="btn primary" style="min-height:38px;padding:8px 16px"
+            onclick="toggleThickPop(false)">${t('done')}</button>
+        </div>
+      </div>
+      <div class="pop" id="textPop">
+        <h3 id="textPopTitle" style="margin:0 0 4px;font-size:16px">${t('addText')}</h3>
+        <textarea id="textArea" rows="3" placeholder="${t('textPlaceholder')}"></textarea>
+        <div class="plabel">${t('textSizeLabel')} <span id="textSizeVal">24</span></div>
+        <input type="range" id="textSizeR" min="10" max="60" step="1">
+        <div class="plabel">${t('textColorLabel')}</div>
+        <div class="row" style="gap:8px">
+          <button class="swatch tsw" data-tc="black" onclick="pickTextColor('black')"><span style="background:#1c1c1c"></span></button>
+          <button class="swatch tsw" data-tc="red" onclick="pickTextColor('red')"><span style="background:#ff5252"></span></button>
+          <button class="swatch tsw" data-tc="blue" onclick="pickTextColor('blue')"><span style="background:#4da3ff"></span></button>
+          <button class="swatch tsw" data-tc="green" onclick="pickTextColor('green')"><span style="background:#3ddc84"></span></button>
+          <button class="swatch tsw" data-tc="orange" onclick="pickTextColor('orange')"><span style="background:#ffb648"></span></button>
+        </div>
+        <div class="meta" style="margin-top:6px;font-size:12px">${t('textHint')}</div>
+        <div class="row" style="margin-top:8px;justify-content:flex-end">
+          <button class="btn warn" id="textDelBtn" style="display:none" onclick="deleteText()">${t('textDel')}</button>
+          <button class="btn" onclick="closeTextPop()">${t('textCancel')}</button>
+          <button class="btn primary" onclick="saveText()">${t('textSave')}</button>
+        </div>
+      </div>
+      <div class="pop" id="printPop">
+        <h3 style="margin:0 0 4px;font-size:16px">${t('printTitle')}</h3>
+        <div class="plabel">${t('printLayer')}</div>
+        <label><input type="radio" name="pl" value="both" checked>${t('both')}</label>
+        <label><input type="radio" name="pl" value="bow">${t('bowOnly')}</label>
+        <label><input type="radio" name="pl" value="text">${t('textOnly')}</label>
+        <label><input type="radio" name="pl" value="clean">${t('clean')}</label>
+        <div class="plabel">${t('printScope')}</div>
+        <label><input type="radio" name="ps" value="page" checked>${t('curPage')}</label>
+        <label><input type="radio" name="ps" value="all">${t('allPages')}</label>
+        <div class="meta" id="printProg" style="margin-top:8px"></div>
+        <div class="row" style="margin-top:10px;justify-content:flex-end">
+          <button class="btn" onclick="closePrintPop()">${t('close')}</button>
+          <button class="btn gold" onclick="doExport()">${t('exportB')}</button>
+          <button class="btn primary" onclick="doPrint()">${t('genPrint')}</button>
+        </div>
+      </div>
+      <div class="vctrl">
+        <button class="btn" id="prevBtn" onclick="goTo(state.currentPage-1)">◀</button>
+        <div class="pagenum" id="pageNum"></div>
+        <button class="btn" id="nextBtn" onclick="goTo(state.currentPage+1)">▶</button>
+      </div>
+    </div>`;
+  updateToolsUI(); updateZoomUI(); updateFab(); updateBroadcastUI();
+  setupFab(); fitHeader();
+
+  const ok = await loadPdf(score);
+  if(ok){
+    const startPage = state.isLiveHere ? state.masterPage : 1;
+    await goTo(startPage, false);
+  }
+  if(!localStorage.getItem('hintSeen')) showHint();
+}
+
+async function applyBroadcastState(){
+  const live = await fetchBroadcast();
+  state.masterPage = live ? live.master_page : 1;
+  state.broadcastTitle = live ? live.title : '';
+  state.isLiveHere = !!(live && live.score_id === state.liveScoreId);
+  updateBroadcastUI();
+}
+function updateBroadcastUI(){
+  const badge = $('liveBadge');
+  if(badge){
+    if(state.isLiveHere){
+      badge.textContent = t('liveBadge');
+      badge.className = 'badge liveRed';
+      badge.style.display = 'inline-flex';
+    }else{
+      badge.style.display = 'none';
+    }
+  }
+  const bb = $('bcastBtn');
+  if(bb){
+    if(canEdit()){
+      bb.style.display = 'inline-flex';
+      if(state.isLiveHere){
+        bb.textContent = t('liveBtnOn');
+        bb.className = 'tbtn liveOn';
+      }else{
+        bb.textContent = state.broadcastTitle ? t('liveBtnOther') : t('liveBtnOff');
+        bb.className = 'tbtn';
+      }
+    }else{
+      bb.style.display = 'none';
+    }
+  }
+  const jb = $('jumpBtn');
+  if(jb) jb.style.display = state.isLiveHere ? 'inline-flex' : 'none';
+}
+async function bcastBtnTap(){
+  if(!canEdit()){ toast(t('needEdit')); openRolePop(); return; }
+  if(state.isLiveHere){
+    await stopBroadcastLive();
+  }else{
+    await startBroadcast(state.liveScoreId);
+  }
+}
+
+const FAB = { sx:null, sy:0, ox:0, oy:0, moved:false, dock:null };
+function setupFab(){
+  const dock = $('fabDock'), fab = $('fab');
+  if(!dock || !fab) return;
+  FAB.dock = dock;
+  const saved = JSON.parse(localStorage.getItem('fabPos') || 'null');
+  if(saved && saved.x != null){
+    dock.style.left = saved.x + 'px'; dock.style.top = saved.y + 'px';
+    dock.style.right = 'auto'; dock.style.bottom = 'auto';
+  }
+  const down = e => {
+    const p = e.touches ? e.touches[0] : e;
+    FAB.sx = p.clientX; FAB.sy = p.clientY;
+    const r = dock.getBoundingClientRect();
+    FAB.ox = r.left; FAB.oy = r.top; FAB.moved = false;
+    if(e.cancelable) e.preventDefault();
+  };
+  const move = e => {
+    if(FAB.sx == null || !FAB.dock) return;
+    const p = e.touches ? e.touches[0] : e;
+    const dx = p.clientX - FAB.sx, dy = p.clientY - FAB.sy;
+    if(!FAB.moved && (Math.abs(dx) > 8 || Math.abs(dy) > 8)) FAB.moved = true;
+    if(FAB.moved){
+      const d = FAB.dock;
+      const viewer = d.closest('.viewer') || document.body;
+      const vr = viewer.getBoundingClientRect();
+      const r = d.getBoundingClientRect();
+      const nx = Math.min(Math.max(vr.left + 4, FAB.ox + dx), vr.right - r.width - 4);
+      const ny = Math.min(Math.max(vr.top + 4, FAB.oy + dy), vr.bottom - r.height - 4);
+      d.style.left = (nx - vr.left) + 'px';
+      d.style.top = (ny - vr.top) + 'px';
+      d.style.right = 'auto'; d.style.bottom = 'auto';
+    }
+    if(e.cancelable) e.preventDefault();
+  };
+  const up = () => {
+    if(FAB.sx == null) return;
+    if(FAB.moved && FAB.dock){
+      localStorage.setItem('fabPos', JSON.stringify({
+        x: parseFloat(FAB.dock.style.left), y: parseFloat(FAB.dock.style.top) }));
+    }else{
+      fabToggleMini();
+    }
+    FAB.sx = null;
+  };
+  fab.addEventListener('touchstart', down, { passive:false });
+  fab.addEventListener('touchmove', move, { passive:false });
+  fab.addEventListener('touchend', up);
+  fab.addEventListener('mousedown', down);
+  if(!window.__fabWin){
+    window.__fabWin = true;
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', up);
+  }
+}
+function setMiniVisible(open){
+  const a = $('fabActions'), f = $('fab');
+  if(a) a.style.display = open ? 'flex' : 'none';
+  if(f) f.textContent = open ? '✕' : '🛠️';
+}
+function fabToggleMini(){
+  const a = $('fabActions');
+  if(!a) return;
+  setMiniVisible(a.style.display !== 'flex');
+}
+function fabUndoTap(){ undoStroke(); }
+function fabEraseTap(){ setTool('erase'); }
+function fabClearTap(){
+  setMiniVisible(false);
+  openClearConfirm('mine');
+}
+
+function toggleGroup(id){
+  const g = $(id); if(!g) return;
+  g.classList.toggle('open');
+  if(id === 'grpEdit' && !g.classList.contains('open') && state.tool){
+    state.tool = null; applyTouchAction(); updateToolsUI();
+  }
+}
+function showHint(){
+  $('hintT').textContent = t('hintT');
+  $('hintBody').innerHTML =
+    `<div class="hintStep">${t('hint1')}</div>` +
+    `<div class="hintStep">${t('hint2')}</div>` +
+    `<div class="hintStep">${t('hint3')}</div>` +
+    `<div class="hintStep">${t('hint4')}</div>` +
+    `<div class="hintStep">${t('hint5')}</div>`;
+  $('hintPop').style.display = 'block';
+  $('hintOverlay').style.display = 'block';
+}
+function closeHint(){
+  $('hintPop').style.display = 'none';
+  $('hintOverlay').style.display = 'none';
+  localStorage.setItem('hintSeen', '1');
+}
+
+/* ================= 身份系統 ================= */
+function currentRole(){
+  if(isAdmin()) return { key:'chief', label:t('roleChief'), desc:t('roleChiefDesc') };
+  if(state.isEditor) return state.isBroadcaster
+    ? { key:'master', label:t('roleMaster'), desc:t('roleMasterDesc') }
+    : { key:'co', label:t('roleCo'), desc:t('roleCoDesc') };
+  return { key:'member', label:t('roleMember'), desc:t('roleMemberDesc') };
+}
+function updateRoleUI(){
+  const r = currentRole();
+  const rb = $('roleBtn');
+  if(rb){
+    rb.innerHTML = r.label + ' ▾';
+    rb.classList.toggle('admin', isAdmin());
+    rb.style.display = 'inline-flex';
+  }
+}
+function openRolePop(){
+  const p = $('rolePop');
+  if(p && p.style.display !== 'block') toggleRolePop();
+}
+async function toggleRolePop(){
+  const pop = $('rolePop');
+  if(!pop) return;
+  if(pop.style.display === 'block'){ closeRolePop(); return; }
+  const r = currentRole();
+  const live = await fetchBroadcast();
+  let html = `
+    <div class="rTitle">🎭 ${t('roleBtn')}</div>
+    <div class="rNow"><b>${r.label}</b><br>
+      <span style="color:var(--muted);font-size:12px">${r.desc}</span></div>`;
+  if(live){
+    html += `
+      <div class="liveBox">
+        <b>${t('liveStatusOn')}</b>${esc(live.title)}<br>
+        ${canEdit()
+          ? `<button class="btn warn sm" style="width:100%;margin-top:6px"
+               onclick="roleStopLive()">${t('roleStopLive')}</button>`
+          : `<a class="btn sm gold" style="width:100%;margin-top:6px;text-decoration:none"
+               href="#/view/${live.score_id}">${t('goLive')}</a>`}
+      </div>`;
+  }else{
+    html += `<div class="rNow" style="color:var(--muted)">${t('liveStatusNone')}</div>`;
+    if(canEdit() && inViewerPage()){
+      html += `<button class="btn gold" onclick="closeRolePop();startBroadcast('${state.liveScoreId}')">${t('roleStartLive')}</button>`;
+    }
+  }
+  if(canEdit()){
+    html += `<button class="btn" onclick="closeRolePop();editName()">
+      ${t('rename')}：${esc(state.myName||'—')}</button>`;
+  }
+  if(r.key === 'member'){
+    html += `
+      <button class="btn primary" onclick="roleBecomeLeader()">${t('becomeLeader')}</button>
+      <button class="btn gold" onclick="roleBecomeAdmin()">${t('becomeAdmin')}</button>`;
+  }else{
+    if(r.key === 'co' && state.masterName === ''){
+      html += `<button class="btn gold" onclick="closeRolePop();takeoverMaster()">${t('takeover')}</button>`;
+    }
+    html += `<button class="btn warn" onclick="roleExit()">${t('exitRole')}</button>`;
+  }
+  html += `<div class="sep"></div>
+    <button class="btn" style="background:#3a1515;color:#ffb3b3"
+      onclick="gateLogout()">${t('logout')}</button>`;
+  pop.innerHTML = html;
+  pop.style.display = 'block';
+}
+async function roleStopLive(){
+  closeRolePop();
+  await stopBroadcastLive();
+}
+function closeRolePop(){
+  const pop = $('rolePop');
+  if(pop) pop.style.display = 'none';
+}
+document.addEventListener('click', e => {
+  const pop = $('rolePop'), btn = $('roleBtn');
+  if(!pop || pop.style.display !== 'block') return;
+  if(pop.contains(e.target) || (btn && btn.contains(e.target))) return;
+  closeRolePop();
+});
+function roleBecomeLeader(){ closeRolePop(); becomeLeaderFlow().then(updateRoleUI); }
+function roleBecomeAdmin(){
+  closeRolePop();
+  becomeAdminFlow().then(ok => {
+    updateRoleUI(); updateToolsUI(); updateFab();
+    if(isHome()) renderHome();
+  });
+}
+function roleExit(){
+  if(!confirm(t('exitRoleConfirm'))) return;
+  closeRolePop(); exitRole();
+}
+function renderIfLibrary(){
+  if(isHome()) renderHome();
+}
+function editName(){
+  const v = askSafeName(state.myName);
+  if(!v) return;
+  state.myName = v;
+  localStorage.setItem('drawerName', v);
+  toast(t('nameSet', { n: v }));
+  updateRoleUI(); redrawInk();
+}
+async function becomeLeaderFlow(){
+  if(!state.myName || !nameIsSafe(state.myName)){
+    const v = askSafeName(state.myName);
+    if(!v) return false;
+    state.myName = v;
+    localStorage.setItem('drawerName', v);
+    updateRoleUI();
+  }
+  const pw = prompt(t('pwPrompt'));
+  if(!pw) return false;
+  const slot = await tryClaim(pw, state.myName);
+  if(slot == null) return false;
+  applyClaim(slot, pw);
+  return true;
+}
+async function becomeAdminFlow(){
+  const pw = prompt(t('adminPwPrompt'));
+  if(!pw) return false;
+  try{
+    const { data, error } = await db.rpc('verify_admin_pw', { p_admin_pw: pw });
+    if(error || !data){ toast(t('wrongPw')); return false; }
+    state.adminPw = pw;
+    state.isChief = true;
+    localStorage.setItem('adminPw', pw);
+    toast(t('chiefOk'));
+    updateRoleUI(); updateToolsUI(); updateFab();
+    if(inViewerPage()) updateBroadcastUI();
+    return true;
+  }catch(e){ toast(t('wrongPw')); return false; }
+}
+function exitRole(){
+  if(state.isEditor){
+    try{
+      db.rpc('release_editor',
+        { p_edit_pw: state.editPw, p_name: state.myName, p_slot: state.editorSlot });
+    }catch(e){}
+    stopHeartbeat();
+  }
+  state.isEditor = false; state.editorSlot = null; state.isBroadcaster = false;
+  state.masterName = '';
+  state.editPw = '';
+  localStorage.removeItem('editPw');
+  state.isChief = false;
+  state.adminPw = '';
+  localStorage.removeItem('adminPw');
+  updateRoleUI(); updateToolsUI(); updateFab(); applyTouchAction();
+  if(inViewerPage()) updateBroadcastUI();
+  toast(t('exitedRole'));
+  renderIfLibrary();
+}
+
+async function tryClaim(pw, name, silent){
+  const { data, error } = await db.rpc('claim_editor',
+    { p_edit_pw: pw, p_name: name || '' });
+  if(error){
+    if(!silent) toast(dbErrMsg(error));
+    return null;
+  }
+  return data;
+}
+function applyClaim(slot, pw, silentToast){
+  state.editPw = pw;
+  localStorage.setItem('editPw', pw);
+  state.isEditor = true;
+  state.editorSlot = slot;
+  state.isBroadcaster = (slot === 1);
+  startHeartbeat();
+  updateRoleUI(); updateToolsUI(); updateFab(); applyTouchAction();
+  if(inViewerPage()) updateBroadcastUI();
+  if(!silentToast) toast(slot === 1 ? t('claimOk1') : t('claimOk2'));
+}
+function startHeartbeat(){
+  stopHeartbeat();
+  state.hbTimer = setInterval(heartbeat, 15000);
+  heartbeat();
+}
+function stopHeartbeat(){
+  if(state.hbTimer){ clearInterval(state.hbTimer); state.hbTimer = null; }
+}
+async function heartbeat(){
+  if(!state.isEditor || state.editorSlot == null) return;
+  try{
+    const { data, error } = await db.rpc('heartbeat_editor',
+      { p_edit_pw: state.editPw, p_name: state.myName, p_slot: state.editorSlot });
+    if(error) throw error;
+    state.masterName = (data && data.master) || '';
+  }catch(e){
+    if(String(e.message||'').includes('SLOT_LOST')){
+      const slot = await tryClaim(state.editPw, state.myName, true);
+      if(slot != null){ state.editorSlot = slot; state.isBroadcaster = (slot===1); }
+      else degradeEditor();
+    }
+  }
+}
+function degradeEditor(){
+  state.isEditor = false; state.editorSlot = null; state.isBroadcaster = false;
+  stopHeartbeat();
+  updateRoleUI(); updateToolsUI(); updateFab(); applyTouchAction();
+  if(inViewerPage()) updateBroadcastUI();
+  toast(t('slotLost'));
+}
+async function takeoverMaster(){
+  if(!state.isEditor || state.isBroadcaster) return;
+  try{
+    await db.rpc('release_editor',
+      { p_edit_pw: state.editPw, p_name: state.myName, p_slot: state.editorSlot });
+  }catch(e){}
+  const slot = await tryClaim(state.editPw, state.myName, true);
+  if(slot == null){ degradeEditor(); return; }
+  state.editorSlot = slot;
+  state.isBroadcaster = (slot === 1);
+  startHeartbeat(); updateRoleUI();
+  toast(slot === 1 ? t('takeoverOk') : t('editorsFull'));
+}
+
+/* ================= 圖層 ================= */
+async function loadLayers(scoreId){
+  try{
+    const { data } = await db.from('layers').select('*')
+      .eq('score_id', scoreId).order('created_at');
+    state.layers = data || [];
+  }catch(e){ state.layers = []; }
+  if(state.layerSel && !state.layers.find(l => l.id === state.layerSel)){
+    state.layerSel = null;
+  }
+  renderLayer(); updateLayerBtn();
+}
+function updateLayerBtn(){
+  const b = $('layerBtn');
+  if(b) b.classList.toggle('active', !!state.layerSel);
+}
+async function getLayerDoc(layer){
+  if(layerDocs.has(layer.id)) return layerDocs.get(layer.id);
+  const url = `${SUPABASE_URL}/storage/v1/object/public/scores/${layer.file_path}`;
+  const doc = await pdfjsLib.getDocument(url).promise;
+  layerDocs.set(layer.id, doc);
+  return doc;
+}
+async function renderLayer(){
+  const lc = $('layerCanvas'); if(!lc) return;
+  const ctx = lc.getContext('2d');
+  ctx.setTransform(1,0,0,1,0,0);
+  ctx.clearRect(0, 0, lc.width, lc.height);
+  if(!state.layerSel) return;
+  const layer = state.layers.find(l => l.id === state.layerSel);
+  if(!layer) return;
+  try{
+    const doc = await getLayerDoc(layer);
+    const pg = await doc.getPage(Math.min(state.currentPage, doc.numPages));
+    const v1 = pg.getViewport({ scale: 1 });
+    const cssW = (state._vp && state._vp.cssW) || 800;
+    const vp = pg.getViewport({ scale: cssW / v1.width });
+    const dpr = lc.width / vp.width;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.globalAlpha = Math.max(0.1, Math.min(1, state.layerAlpha));
+    await pg.render({ canvasContext: ctx, viewport: vp }).promise;
+    ctx.globalAlpha = 1;
+  }catch(e){}
+}
+function setLayerSel(v){
+  state.layerSel = v || null;
+  updateLayerBtn(); renderLayer();
+  const ar = $('alphaRow');
+  if(ar) ar.style.display = state.layerSel ? 'block' : 'none';
+  const list = $('layerList');
+  if(list){
+    list.querySelectorAll('input[name=lay]').forEach(r =>
+      r.checked = (r.value === (state.layerSel || '')));
+  }
+}
+function openLayerPop(){
+  const pop = $('layerPop'); if(!pop) return;
+  $('layerTitle').textContent = t('layerTitle');
+  $('layerHint').textContent = t('layerHint');
+  $('layerAlphaLabel').textContent = t('layerAlphaLabel');
+  $('layerCloseBtn').textContent = t('close');
+  const up = $('layerUploadBtn');
+  up.style.display = canEdit() ? 'inline-flex' : 'none';
+  up.textContent = t('layerUpload');
+  const ar = $('layerAlphaR');
+  ar.value = Math.round(state.layerAlpha * 100);
+  ar.oninput = () => {
+    state.layerAlpha = parseInt(ar.value, 10) / 100;
+    localStorage.setItem('layerAlpha', state.layerAlpha);
+    renderLayer();
+  };
+  $('alphaRow').style.display = state.layerSel ? 'block' : 'none';
+  renderLayerList();
+  pop.style.display = 'block';
+  $('layerOverlay').style.display = 'block';
+}
+function renderLayerList(){
+  const list = $('layerList'); if(!list) return;
+  let html = `<label class="lrow">
+    <input type="radio" name="lay" value="" ${!state.layerSel?'checked':''}
+      onchange="setLayerSel('')">
+    <span class="grow">🎼 ${t('layerBase')}</span></label>`;
+  if(!state.layers.length){
+    html += `<div class="plabel" style="padding:6px 4px">${t('layerNone')}</div>`;
+  }
+  state.layers.forEach(l => {
+    const canDel = String(l.owner_name||'') === state.myName || isAdmin();
+    html += `<label class="lrow">
+      <input type="radio" name="lay" value="${l.id}" ${state.layerSel===l.id?'checked':''}
+        onchange="setLayerSel('${l.id}')">
+      <span class="grow">📄 ${esc(l.layer_name)}
+        <span style="color:var(--muted)">· ${esc(l.owner_name||'')}</span></span>
+      ${canDel ? `<button class="del" onclick="event.preventDefault();deleteLayer('${l.id}')">🗑️</button>` : ''}
+    </label>`;
+  });
+  list.innerHTML = html;
+}
+function closeLayerPop(){
+  $('layerPop').style.display = 'none';
+  $('layerOverlay').style.display = 'none';
+}
+async function uploadLayer(){
+  if(!canEdit() || !state.liveScoreId){
+    toast(t('needEdit')); return;
+  }
+  const name = prompt(t('layerNameAsk'), state.myName || '');
+  if(!name) return;
+  const fi = $('layerFile');
+  fi.onchange = async () => {
+    const f = fi.files && fi.files[0];
+    fi.value = '';
+    if(!f) return;
+    try{
+      const buf = new Uint8Array(await f.arrayBuffer());
+      const doc = await pdfjsLib.getDocument({ data: buf }).promise;
+      const pc = doc.numPages; doc.destroy();
+      if(state.numPages && pc !== state.numPages){
+        toast(t('layerPageMismatch', { a: state.numPages, b: pc }));
+        return;
+      }
+      const safeName = f.name.replace(/[^\w.\-\u4e00-\u9fa5]/g, '_');
+      const path = 'layers/' + Date.now() + '_' + safeName;
+      const up = await db.storage.from('scores').upload(path, f,
+        { contentType:'application/pdf', upsert:false });
+      if(up.error) throw up.error;
+      const r = await db.rpc('add_layer', {
+        p_edit_pw: epw(), p_score_id: state.liveScoreId,
+        p_owner: state.myName, p_name: name.trim().slice(0,40),
+        p_file_path: path, p_page_count: pc });
+      if(r.error){
+        db.storage.from('scores').remove([path]);
+        toast(dbErrMsg(r.error));
+        return;
+      }
+      toast(t('layerUploaded'));
+      await loadLayers(state.liveScoreId);
+      renderLayerList();
+    }catch(err){ toast('Error: '+err.message); }
+  };
+  fi.click();
+}
+async function deleteLayer(id){
+  if(!confirm(t('layerDelConfirm'))) return;
+  const { error } = await db.rpc('delete_layer', {
+    p_edit_pw: epw(), p_layer_id: id,
+    p_owner: state.myName, p_admin_pw: null
+  });
+  if(error){ toast(dbErrMsg(error)); return; }
+  if(state.layerSel === id){ state.layerSel = null; $('alphaRow').style.display='none'; }
+  toast(t('layerDeleted'));
+  await loadLayers(state.liveScoreId);
+  renderLayerList();
+}
+
+/* ================= 全螢幕 ================= */
+async function toggleFullscreen(){
+  const entering = !state.fsMode;
+  state.fsMode = entering;
+  document.body.classList.toggle('fs-mode', entering);
+  try{
+    if(entering && document.documentElement.requestFullscreen)
+      await document.documentElement.requestFullscreen();
+    else if(!entering && document.fullscreenElement)
+      await document.exitFullscreen();
+  }catch(e){}
+}
+document.addEventListener('fullscreenchange', () => {
+  if(!document.fullscreenElement && state.fsMode){
+    state.fsMode = false;
+    document.body.classList.remove('fs-mode');
+  }
+});
+
+async function loadPdf(score){
+  try{
+    if(state.pdf && state.pdfScoreId === score.id){
+      await loadLayers(score.id);
+      return true;
+    }
+    if(state.pdf){ try{ state.pdf.destroy(); }catch(e){} state.pdf = null; }
+    layerDocs.forEach(d => { try{ d.destroy(); }catch(e){} });
+    layerDocs.clear();
+    state.layerSel = null;
+    state.pdfScoreId = score.id;
+    state.zoom = 1;
+    const url = `${SUPABASE_URL}/storage/v1/object/public/scores/${score.file_path}`;
+    state.pdf = await pdfjsLib.getDocument(url).promise;
+    state.numPages = state.pdf.numPages;
+    $('stage').innerHTML = `<div id="zoomWrap">
+      <canvas id="pdfCanvas"></canvas>
+      <canvas id="layerCanvas" style="position:absolute;left:0;top:0;pointer-events:none"></canvas>
+      <canvas id="inkCanvas" style="position:absolute;left:0;top:0"></canvas>
+    </div>`;
+    setupStageGestures(); setupInk(); applyTouchAction();
+    await loadLayers(score.id);
+    return true;
+  }catch(err){
+    const st = $('stage');
+    if(st) st.innerHTML = `<div class="center" style="margin:40px auto;color:var(--danger)">
+      ⚠️ ${t('loadFail')}<br><span style="color:var(--muted)">${esc(err.message)}</span></div>`;
+    return false;
+  }
+}
+
+async function renderPage(n){
+  if(!state.pdf) return;
+  n = Math.max(1, Math.min(state.numPages, n));
+  state.currentPage = n;
+  const page = await state.pdf.getPage(n);
+  const stage = $('stage');
+  const zoom = state.zoom || 1;
+  const baseW = Math.max(320, stage.clientWidth - 16);
+  const v1 = page.getViewport({ scale: 1 });
+  const vp = page.getViewport({ scale: (baseW * zoom) / v1.width });
+  state._vp = { cssW: vp.width, cssH: vp.height };
+  const canvas = $('pdfCanvas');
+  let dpr = Math.min(2, window.devicePixelRatio || 1);
+  const MAX_DIM = 8192, MAX_AREA = 16.5e6;
+  let cw = vp.width * dpr, ch = vp.height * dpr;
+  if(cw > MAX_DIM){ dpr *= MAX_DIM / cw; cw = MAX_DIM; ch = vp.height * dpr; }
+  if(cw * ch > MAX_AREA){
+    const f = Math.sqrt(MAX_AREA / (cw * ch));
+    dpr *= f; cw *= f; ch *= f;
+  }
+  canvas.width = Math.round(cw); canvas.height = Math.round(ch);
+  canvas.style.width = vp.width + 'px';
+  canvas.style.height = vp.height + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  await page.render({ canvasContext: ctx, viewport: vp }).promise;
+  const ink = $('inkCanvas');
+  const lc = $('layerCanvas');
+  if(ink){
+    ink.width = canvas.width; ink.height = canvas.height;
+    ink.style.width = canvas.style.width; ink.style.height = canvas.style.height;
+  }
+  if(lc){
+    lc.width = canvas.width; lc.height = canvas.height;
+    lc.style.width = canvas.style.width; lc.style.height = canvas.style.height;
+  }
+  applyTouchAction();
+  await renderLayer();
+  redrawInk();
+  const pn = $('pageNum');
+  if(pn) pn.textContent = n + ' / ' + state.numPages;
+  updateZoomUI();
+}
+async function loadStrokes(){
+  if(!state.liveScoreId || state._drawingNow) return;
+  try{
+    const { data } = await db.from('strokes').select('*')
+      .eq('score_id', state.liveScoreId).eq('page', state.currentPage)
+      .order('created_at');
+    state.strokes = data || [];
+  }catch(e){ state.strokes = []; }
+  redrawInk();
+}
+async function loadTexts(){
+  if(!state.liveScoreId || state._drawingNow) return;
+  try{
+    const { data } = await db.from('texts').select('*')
+      .eq('score_id', state.liveScoreId).eq('page', state.currentPage)
+      .order('created_at');
+    state.texts = data || [];
+  }catch(e){ state.texts = []; }
+  redrawInk();
+}
+let masterTimer = null;
+async function goTo(n, broadcast){
+  if(!state.pdf) return;
+  const target = Math.max(1, Math.min(state.numPages, n));
+  await renderPage(target);
+  await Promise.all([loadStrokes(), loadTexts()]);
+  if(broadcast !== false && state.isBroadcaster && state.isLiveHere){
+    clearTimeout(masterTimer);
+    masterTimer = setTimeout(async () => {
+      const { error } = await db.rpc('set_master_page',
+        { p_edit_pw: epw(), p_page: state.currentPage });
+      if(error && isWrongPw(error)) toast(t('needEdit'));
+    }, 250);
+  }
+}
+function jumpToMaster(){ goTo(state.masterPage, false); }
+
+/* ================= 縮放 ================= */
+function applyTouchAction(){
+  const ink = $('inkCanvas'), st = $('stage');
+  if(!ink && !st) return;
+  const mode = (state.tool && canEdit()) ? 'none'
+    : (state.zoom > 1 ? 'pan-x pan-y' : 'pan-y');
+  if(ink) ink.style.touchAction = mode;
+  if(st) st.style.touchAction = mode;
+}
+function updateZoomUI(){
+  const b = $('zoomBtn'); if(!b) return;
+  const z = state.zoom || 1;
+  b.textContent = z > 1.01 ? ('🔍 ' + z.toFixed(1) + '×') : '🔍 1×';
+  b.classList.toggle('active', z > 1.01);
+}
+async function commitZoom(){
+  const wrap = $('zoomWrap'); if(wrap) wrap.style.transform = 'scale(1)';
+  applyTouchAction();
+  const stage = $('stage');
+  const oldSW = stage.scrollWidth, oldSH = stage.scrollHeight;
+  const oldCX = stage.scrollLeft + stage.clientWidth/2;
+  const oldCY = stage.scrollTop + stage.clientHeight/2;
+  await renderPage(state.currentPage);
+  const rx = oldSW ? oldCX/oldSW : .5;
+  const ry = oldSH ? oldCY/oldSH : .5;
+  stage.scrollLeft = Math.max(0, rx*stage.scrollWidth - stage.clientWidth/2);
+  stage.scrollTop  = Math.max(0, ry*stage.scrollHeight - stage.clientHeight/2);
+}
+async function resetZoom(){
+  if(!state.pdf || state.zoom === 1) return;
+  state.zoom = 1;
+  await commitZoom();
+}
+
+/* ================= 工具 ================= */
+function setTool(tool){
+  if(!canEdit()){ toast(t('needEdit')); openRolePop(); return; }
+  state.tool = (state.tool === tool) ? null : tool;
+  applyTouchAction(); updateToolsUI();
+}
+function toggleDash(){
+  state.dash = !state.dash;
+  if(!state.tool) state.tool = 'pen';
+  applyTouchAction(); updateToolsUI();
+}
+function setDrawColor(c){
+  state.drawColor = c;
+  if(!state.tool) state.tool = 'pen';
+  updateToolsUI();
+}
+function updateFab(){
+  const d = $('fabDock'); if(!d) return;
+  d.style.display = canEdit() ? 'flex' : 'none';
+}
+function updateToolsUI(){
+  const grp = $('grpEdit');
+  if(grp) grp.style.display = canEdit() ? 'block' : 'none';
+  const chiefGrp = $('grpChief');
+  if(chiefGrp) chiefGrp.style.display = isAdmin() ? 'block' : 'none';
+  const row = $('toolsRow'); if(!row) return;
+  ['modePen','modeHl','modeDash','modeLine','modePD','modePU','modeEr','modeTx'].forEach(id => {
+    const b = $(id); if(b) b.classList.remove('active');
+  });
+  const map = { pen:'modePen', hl:'modeHl', line:'modeLine', text:'modeTx',
+    erase:'modeEr', stampDown:'modePD', stampUp:'modePU' };
+  if(state.tool && map[state.tool]){
+    const b = $(map[state.tool]); if(b) b.classList.add('active');
+  }
+  const db_ = $('modeDash');
+  if(db_) db_.classList.toggle('active', state.dash);
+  document.querySelectorAll('#toolsRow .swatch').forEach(el =>
+    el.classList.toggle('active', el.dataset.c === state.drawColor));
+  const tv = $('thickVal'); if(tv) tv.textContent = fmtTh(state.thick);
+  const svv = $('stampVal');
+  if(svv) svv.textContent = '×' + (state.stampScale||1).toFixed(1);
+  const fe = $('fabErase');
+  if(fe) fe.classList.toggle('active', state.tool === 'erase');
+  const st = $('stage');
+  if(st) st.classList.toggle('drawing', !!(state.tool && canEdit()));
+}
+function toggleThickPop(forceClose){
+  const pop = $('thickPop'); if(!pop) return;
+  if(forceClose === false){ pop.style.display = 'none'; return; }
+  const open = pop.style.display !== 'block';
+  pop.style.display = open ? 'block' : 'none';
+  if(!open) return;
+  const r = $('thickRange'), s = $('stampRange');
+  r.value = state.thick;
+  s.value = state.stampScale;
+  r.oninput = () => {
+    state.thick = parseFloat(r.value);
+    localStorage.setItem('penThick', state.thick);
+    const tv = $('thickVal'); if(tv) tv.textContent = fmtTh(state.thick);
+    updateThickPrev();
+  };
+  s.oninput = () => {
+    state.stampScale = parseFloat(s.value);
+    localStorage.setItem('stampScale', state.stampScale);
+    const sv = $('stampVal');
+    if(sv) sv.textContent = '×' + state.stampScale.toFixed(1);
+    updateThickPrev();
+  };
+  updateThickPrev();
+}
+function updateThickPrev(){
+  const cv = $('thickPrev');
+  if(cv){
+    const ctx = cv.getContext('2d');
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    ctx.strokeStyle = COLORS[state.drawColor];
+    ctx.lineWidth = Math.max(0.5, state.thick * (cv.width / 300));
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(14, cv.height/2);
+    ctx.bezierCurveTo(cv.width*0.3, 4, cv.width*0.7, cv.height-4, cv.width-14, cv.height/2);
+    ctx.stroke();
+  }
+  const sv = $('stampPrev');
+  if(sv){
+    const ctx = sv.getContext('2d');
+    ctx.clearRect(0, 0, sv.width, sv.height);
+    ctx.strokeStyle = COLORS[state.drawColor];
+    ctx.lineWidth = Math.max(1, 2.2 * state.stampScale);
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    const cy = sv.height/2;
+    const sz = Math.max(4, Math.min(sv.height*0.36, 8 + 12*state.stampScale));
+    let cx = sv.width*0.28;
+    ctx.beginPath();
+    ctx.moveTo(cx-sz, cy+sz); ctx.lineTo(cx-sz, cy-sz);
+    ctx.lineTo(cx+sz, cy-sz); ctx.lineTo(cx+sz, cy+sz);
+    ctx.stroke();
+    cx = sv.width*0.72;
+    ctx.beginPath();
+    ctx.moveTo(cx-sz, cy-sz); ctx.lineTo(cx, cy+sz); ctx.lineTo(cx+sz, cy-sz);
+    ctx.stroke();
+  }
+}
+
+/* ================= 繪製核心 ================= */
+function segWidth(ink, th, kind){
+  let w = th * (ink.width / 800);
+  if(kind === 'HL') w *= 4;
+  return Math.max(1, w);
+}
+function drawPath(ctx, s, W, H){
+  const P = s.points;
+  if(!P || !P.length) return;
+  const ps = parseStroke(s.color);
+  ctx.strokeStyle = ps.hex; ctx.fillStyle = ps.hex;
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.setLineDash([]);
+  if(ps.kind === 'Π' || ps.kind === 'V'){
+    const cx = P[0].x*W, cy = P[0].y*H, sz = W*0.024*(ps.sc||1);
+    ctx.lineWidth = Math.max(2, ps.th * (W/800));
+    ctx.beginPath();
+    if(ps.kind === 'Π'){
+      ctx.moveTo(cx-sz, cy+sz); ctx.lineTo(cx-sz, cy-sz);
+      ctx.lineTo(cx+sz, cy-sz); ctx.lineTo(cx+sz, cy+sz);
+    }else{
+      ctx.moveTo(cx-sz, cy-sz); ctx.lineTo(cx, cy+sz); ctx.lineTo(cx+sz, cy-sz);
+    }
+    ctx.stroke(); return;
+  }
+  if(ps.kind === 'DS' || ps.kind === 'LD') ctx.setLineDash([W*0.012, W*0.010]);
+  if(P.length === 1){
+    ctx.lineWidth = segWidth({width:W}, ps.th, ps.kind);
+    ctx.beginPath(); ctx.arc(P[0].x*W, P[0].y*H, ctx.lineWidth/2, 0, 7); ctx.fill();
+    ctx.setLineDash([]); return;
+  }
+  if(ps.kind === 'LN' || ps.kind === 'LD'){
+    ctx.lineWidth = segWidth({width:W}, ps.th, ps.kind);
+    ctx.beginPath(); ctx.moveTo(P[0].x*W, P[0].y*H);
+    ctx.lineTo(P[P.length-1].x*W, P[P.length-1].y*H);
+    ctx.stroke(); ctx.setLineDash([]); return;
+  }
+  ctx.lineWidth = segWidth({width:W}, ps.th, ps.kind);
+  for(let i = 0; i < P.length - 1; i++){
+    if(ps.kind === 'HL') ctx.globalAlpha = 0.35;
+    ctx.beginPath();
+    ctx.moveTo(P[i].x*W, P[i].y*H);
+    ctx.lineTo(P[i+1].x*W, P[i+1].y*H);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+  ctx.setLineDash([]);
+}
+function drawHalo(ctx, s, W, H){
+  const P = s.points;
+  if(!P || !P.length) return;
+  const ps = parseStroke(s.color);
+  ctx.save();
+  ctx.globalAlpha = 0.16;
+  ctx.strokeStyle = ps.hex; ctx.fillStyle = ps.hex;
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.setLineDash([]);
+  if(ps.kind === 'Π' || ps.kind === 'V'){
+    const cx = P[0].x*W, cy = P[0].y*H, sz = W*0.024*(ps.sc||1);
+    ctx.beginPath(); ctx.arc(cx, cy, sz*1.5 + 8, 0, 7); ctx.fill();
+    ctx.restore(); return;
+  }
+  if(P.length === 1){
+    const w = Math.max(12, segWidth({width:W}, ps.th, ps.kind) * 2.6);
+    ctx.beginPath(); ctx.arc(P[0].x*W, P[0].y*H, w/2, 0, 7); ctx.fill();
+    ctx.restore(); return;
+  }
+  ctx.lineWidth = Math.max(10, segWidth({width:W}, ps.th, ps.kind) * 2.6);
+  if(ps.kind === 'LN' || ps.kind === 'LD'){
+    if(ps.kind === 'LD') ctx.setLineDash([W*0.012, W*0.010]);
+    ctx.beginPath();
+    ctx.moveTo(P[0].x*W, P[0].y*H);
+    ctx.lineTo(P[P.length-1].x*W, P[P.length-1].y*H);
+    ctx.stroke(); ctx.restore(); return;
+  }
+  for(let i = 0; i < P.length - 1; i++){
+    ctx.beginPath();
+    ctx.moveTo(P[i].x*W, P[i].y*H);
+    ctx.lineTo(P[i+1].x*W, P[i+1].y*H);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+function drawTextAt(ctx, tx, W, H){
+  const fs = Math.max(4, (tx.size||24) * (W/800));
+  const lines = String(tx.content||'').split('\n');
+  ctx.font = fs + 'px system-ui, -apple-system, "PingFang TC", sans-serif';
+  ctx.textBaseline = 'top';
+  ctx.lineJoin = 'round';
+  ctx.strokeStyle = 'rgba(255,255,255,.85)';
+  ctx.lineWidth = fs * 0.15;
+  ctx.fillStyle = tx.color || '#1c1c1c';
+  lines.forEach((ln, i) => {
+    const yy = tx.y*H + i*fs*1.35;
+    ctx.strokeText(ln, tx.x*W, yy);
+    ctx.fillText(ln, tx.x*W, yy);
+  });
+}
+function redrawInk(previewLine){
+  const ink = $('inkCanvas'); if(!ink) return;
+  const ctx = ink.getContext('2d');
+  ctx.clearRect(0, 0, ink.width, ink.height);
+  for(const s of state.strokes) if(isMine(s)) drawHalo(ctx, s, ink.width, ink.height);
+  for(const s of state.strokes) drawPath(ctx, s, ink.width, ink.height);
+  for(const tx of state.texts) drawTextAt(ctx, tx, ink.width, ink.height);
+  if(previewLine && previewLine.length === 2){
+    drawPath(ctx, { color: encodeStroke(
+      state.dash ? 'LD' : 'LN', COLORS[state.drawColor], state.thick),
+      points: previewLine }, ink.width, ink.height);
+  }
+}
+function hitStroke(px, py){
+  const ink = $('inkCanvas'); if(!ink) return null;
+  const W = ink.width, H = ink.height;
+  const tol = Math.max(16, W*0.014);
+  let other = null;
+  for(let i = state.strokes.length - 1; i >= 0; i--){
+    const s = state.strokes[i];
+    for(const p of s.points){
+      const dx = p.x*W - px, dy = p.y*H - py;
+      if(dx*dx + dy*dy < tol*tol){
+        if(isMine(s) || isAdmin()) return s;
+        if(!other) other = s;
+        break;
+      }
+    }
+  }
+  return other;
+}
+let measureCtx = null;
+function hitText(px, py){
+  const ink = $('inkCanvas'); if(!ink || !state.texts.length) return null;
+  const W = ink.width, H = ink.height;
+  if(!measureCtx) measureCtx = document.createElement('canvas').getContext('2d');
+  for(let i = state.texts.length - 1; i >= 0; i--){
+    const tx = state.texts[i];
+    const fs = Math.max(4, (tx.size||24) * (W/800));
+    measureCtx.font = fs + 'px system-ui, -apple-system, "PingFang TC", sans-serif';
+    const lines = String(tx.content||'').split('\n');
+    let w = 0;
+    lines.forEach(ln => { w = Math.max(w, measureCtx.measureText(ln).width); });
+    const x0 = tx.x*W - 6, y0 = tx.y*H - 6;
+    const bw = w + 12, bh = lines.length*fs*1.35 + 12;
+    if(px >= x0 && px <= x0+bw && py >= y0 && py <= y0+bh) return tx;
+  }
+  return null;
+}
+async function eraseAt(p){
+  const ink = $('inkCanvas'); if(!ink) return;
+  const s = hitStroke(p.x*ink.width, p.y*ink.height);
+  if(!s) return;
+  const owner = ownerOf(s);
+  const mine = isMine(s);
+  if(!mine && !isAdmin()){ toast(t('notYours', { n: owner })); return; }
+  const { error } = await db.rpc('delete_stroke',
+    { p_edit_pw: epw(), p_stroke_id: s.id });
+  if(error){ toast(dbErrMsg(error)); return; }
+  state.strokes = state.strokes.filter(x => x.id !== s.id);
+  redrawInk();
+  toast(mine ? t('eraseOk') : t('chiefErased', { n: owner }));
+}
+
+/* ================= 文字 ================= */
+let textEditing = null, textPos = null;
+function openTextDialog(tx, pos){
+  textEditing = tx || null; textPos = pos || null;
+  $('textPopTitle').textContent = tx ? t('editText') : t('addText');
+  $('textArea').value = tx ? tx.content : '';
+  const sz = tx ? Math.round(tx.size||24) : state.textSize;
+  state.textSize = sz;
+  $('textSizeR').value = sz;
+  $('textSizeVal').textContent = sz;
+  if(tx) state.textColor = guessColorKey(tx.color);
+  document.querySelectorAll('#textPop .tsw').forEach(el =>
+    el.classList.toggle('active', el.dataset.tc === state.textColor));
+  const canDel = tx && (isMine(tx) || isAdmin());
+  $('textDelBtn').style.display = canDel ? 'inline-flex' : 'none';
+  $('textPop').style.display = 'block';
+  setTimeout(()=>{ try{ $('textArea').focus(); }catch(e){} }, 120);
+}
+function closeTextPop(){
+  const pop = $('textPop'); if(pop) pop.style.display = 'none';
+  textEditing = null; textPos = null;
+}
+function pickTextColor(c){
+  state.textColor = c;
+  localStorage.setItem('textColorKey', c);
+  document.querySelectorAll('#textPop .tsw').forEach(el =>
+    el.classList.toggle('active', el.dataset.tc === c));
+}
+async function saveText(){
+  const content = $('textArea').value.trim();
+  if(!content){ toast(t('textNeedContent')); return; }
+  const size = state.textSize;
+  const color = COLORS[state.textColor] || '#1c1c1c';
+  if(textEditing){
+    const { error } = await db.rpc('update_text', {
+      p_edit_pw: epw(), p_text_id: textEditing.id,
+      p_content: content, p_size: size, p_color: color });
+    if(error){ toast(dbErrMsg(error)); return; }
+    Object.assign(textEditing, { content, size, color });
+    toast(t('textUpdated'));
+  }else{
+    if(!state.liveScoreId || !textPos){ closeTextPop(); return; }
+    const r = await db.rpc('add_text', {
+      p_edit_pw: epw(), p_score_id: state.liveScoreId,
+      p_page: state.currentPage, p_name: state.myName,
+      p_content: content, p_x: textPos.x, p_y: textPos.y,
+      p_size: size, p_color: color });
+    if(r.error){ toast(dbErrMsg(r.error)); return; }
+    state.texts.push({ id: r.data, drawer_name: state.myName,
+      page: state.currentPage, content, x: textPos.x, y: textPos.y, size, color });
+    toast(t('textSaved'));
+  }
+  closeTextPop(); redrawInk();
+}
+async function deleteText(){
+  if(!textEditing) return;
+  if(!isMine(textEditing) && !isAdmin()){
+    toast(t('textNotYours', { n: ownerOf(textEditing) })); return;
+  }
+  if(!confirm(t('confirmDelText'))) return;
+  const { error } = await db.rpc('delete_text',
+    { p_edit_pw: epw(), p_text_id: textEditing.id });
+  if(error){ toast(dbErrMsg(error)); return; }
+  state.texts = state.texts.filter(x => x.id !== textEditing.id);
+  toast(t('textDeleted'));
+  closeTextPop(); redrawInk();
+}
+
+/* ================= 清除確認 ================= */
+let clearKind = null;
+let undoData = null;
+let undoTimer = null;
+function openClearConfirm(kind){
+  if(kind === 'all' && !isAdmin()){ toast(t('needEdit')); return; }
+  if(kind === 'mine' && !canEdit()){ toast(t('needEdit')); return; }
+  clearKind = kind;
+  const mine = state.strokes.filter(isMine);
+  const isAll = kind === 'all';
+  if(isAll && !state.strokes.length && !state.texts.length){
+    toast(t('nothingMine')); return;
+  }
+  if(!isAll && !mine.length){ toast(t('nothingMine')); return; }
+  $('clearTitle').textContent = isAll ? t('clearAllT') : t('clearMineT');
+  let body;
+  if(isAll){
+    body = t('clearAllBody', { p: state.currentPage, n: state.strokes.length });
+    if(state.texts.length){
+      body += '<br>' + t('clearAllTxtBody', { m: state.texts.length });
+    }
+    if(state.strokes.length){
+      const byOwner = {};
+      state.strokes.forEach(s => {
+        const o = ownerOf(s);
+        byOwner[o] = (byOwner[o]||0) + 1;
+      });
+      body += '<br>' + Object.entries(byOwner)
+        .map(([o,c]) => `<span class="own">✍️ ${esc(o)}：${c}</span>`).join(' ');
+    }
+  }else{
+    body = t('clearMineBody', { p: state.currentPage, n: mine.length });
+  }
+  body += `<br><br>${t('clearUndoHint')}`;
+  $('clearBody').innerHTML = body;
+  $('clearCancel').textContent = t('clearCancel');
+  $('clearGo').textContent = isAll ? t('clearGoAll') : t('clearGoMine');
+  $('clearGo').onclick = () => {
+    closeClearPop();
+    if(clearKind === 'all') doClearAll(); else doClearMine();
+  };
+  $('clearPop').style.display = 'block';
+  $('clearOverlay').style.display = 'block';
+}
+function closeClearPop(){
+  $('clearPop').style.display = 'none';
+  $('clearOverlay').style.display = 'none';
+}
+function showUndoChip(){
+  const chip = $('undoChip');
+  if(!chip) return;
+  chip.style.display = 'inline-flex';
+  clearTimeout(undoTimer);
+  undoTimer = setTimeout(() => {
+    chip.style.display = 'none';
+    undoData = null;
+  }, 30000);
+}
+async function undoCleared(){
+  if(!undoData || (!undoData.strokes.length && !(undoData.texts||[]).length)) return;
+  const d = undoData; undoData = null;
+  $('undoChip').style.display = 'none';
+  let fail = 0;
+  for(const s of d.strokes){
+    try{
+      const r = await db.rpc('add_stroke', {
+        p_edit_pw: epw(), p_score_id: d.scoreId,
+        p_page: d.page, p_name: s.drawer_name || '',
+        p_color: s.color, p_points: s.points });
+      if(r.error) fail++;
+    }catch(e){ fail++; }
+  }
+  for(const tx of (d.texts||[])){
+    try{
+      const r = await db.rpc('add_text', {
+        p_edit_pw: epw(), p_score_id: d.scoreId,
+        p_page: d.page, p_name: tx.drawer_name || '',
+        p_content: tx.content, p_x: tx.x, p_y: tx.y,
+        p_size: tx.size, p_color: tx.color });
+      if(r.error) fail++;
+    }catch(e){ fail++; }
+  }
+  if(state.currentPage !== d.page){ await goTo(d.page, false); }
+  else{ await Promise.all([loadStrokes(), loadTexts()]); }
+  toast(fail ? t('undoClearedFail') : t('undoClearedOk'));
+}
+async function doClearMine(){
+  if(!canEdit()) return;
+  const mine = state.strokes.filter(isMine);
+  if(!mine.length){ toast(t('nothingMine')); return; }
+  undoData = { page: state.currentPage, scoreId: state.liveScoreId,
+    strokes: mine.map(s => ({ drawer_name: s.drawer_name, color: s.color, points: s.points })),
+    texts: [] };
+  state._drawingNow = true;
+  for(const s of mine){
+    await db.rpc('delete_stroke', { p_edit_pw: epw(), p_stroke_id: s.id });
+  }
+  state._drawingNow = false;
+  state.strokes = state.strokes.filter(s => !isMine(s));
+  redrawInk(); toast(t('clearPageOk'));
+  showUndoChip();
+}
+async function doClearAll(){
+  if(!isAdmin()) return;
+  if(!state.strokes.length && !state.texts.length){
+    toast(t('nothingMine')); return;
+  }
+  /* 儲存復原資料：弓法＋文字 */
+  undoData = { page: state.currentPage, scoreId: state.liveScoreId,
+    strokes: state.strokes.map(s => ({ drawer_name: s.drawer_name, color: s.color, points: s.points })),
+    texts: state.texts.map(tx => ({ drawer_name: tx.drawer_name,
+      content: tx.content, x: tx.x, y: tx.y, size: tx.size, color: tx.color })) };
+  state._drawingNow = true;  /* 批次刪除期間暫停 realtime 重載 */
+  for(const s of state.strokes.slice()){
+    await db.rpc('delete_stroke', { p_edit_pw: epw(), p_stroke_id: s.id });
+  }
+  /* ⭐ 文字標註一併清除 */
+  for(const tx of state.texts.slice()){
+    await db.rpc('delete_text', { p_edit_pw: epw(), p_text_id: tx.id });
+  }
+  state._drawingNow = false;
+  state.strokes = [];
+  state.texts = [];
+  redrawInk(); toast(t('clearAllOk'));
+  showUndoChip();
+}
+
+/* ================= pointer 繪製 ================= */
+function setupInk(){
+  const ink = $('inkCanvas');
+  if(!ink || ink._bound) return;
+  ink._bound = true;
+  ink.addEventListener('contextmenu', e => e.preventDefault());
+  let drawing = false, erasing = false, last = null, pts = [], lineStart = null, textDrag = null;
+  const pos = e => {
+    const r = ink.getBoundingClientRect();
+    return { x: +((e.clientX - r.left)/r.width).toFixed(4),
+             y: +((e.clientY - r.top)/r.height).toFixed(4) };
+  };
+  const cancel = () => {
+    if(textDrag){
+      textDrag.tx.x = textDrag.sx0; textDrag.tx.y = textDrag.sy0;
+      textDrag = null; redrawInk();
+    }
+    if(drawing || erasing){
+      drawing = false; erasing = false; state._drawingNow = false;
+      redrawInk();
+    }
+  };
+  window.__cancelDraw = cancel;
+  const ensureEditor = () => {
+    if(canEdit()) return true;
+    toast(t('needEdit')); openRolePop();
+    return false;
+  };
+  const ensureName = () => {
+    if(state.myName && nameIsSafe(state.myName)) return true;
+    const v = askSafeName(state.myName);
+    if(!v) return false;
+    state.myName = v;
+    localStorage.setItem('drawerName', v);
+    updateRoleUI();
+    return true;
+  };
+  ink.addEventListener('pointerdown', e => {
+    if(e.pointerType === 'eraser' ||
+       (e.pointerType === 'pen' && (e.buttons & 32))){
+      setTempErase(true);
+    }
+    if(e.pointerType === 'pen' || e.pointerType === 'eraser'){
+      lastPenDown = Date.now();
+    }
+    if(e.pointerType === 'touch' && Date.now() - lastPenDown < 2000) return;
+    if(!state.tool) return;
+    if(!ensureEditor()) return;
+    if(drawing || erasing || textDrag) return;
+    if(!ensureName()) return;
+    e.preventDefault();
+    try{ ink.setPointerCapture(e.pointerId); }catch(err){}
+    const p = pos(e);
+    if(state.tool === 'text'){
+      const hit = hitText(p.x*ink.width, p.y*ink.height);
+      if(hit){
+        if(!isMine(hit) && !isAdmin()){
+          toast(t('textNotYours', { n: ownerOf(hit) }));
+          return;
+        }
+        textDrag = { tx: hit, ox: p.x, oy: p.y, sx0: hit.x, sy0: hit.y, moved: false };
+      }else{
+        openTextDialog(null, { x: p.x, y: p.y });
+      }
+      return;
+    }
+    const wantErase = state.tool === 'erase' || e.pointerType === 'eraser' || (e.buttons & 32);
+    if(wantErase){ erasing = true; state._drawingNow = true; eraseAt(p); return; }
+    if(state.tool === 'stampDown' || state.tool === 'stampUp'){
+      commitStamp(p); return;
+    }
+    drawing = true; state._drawingNow = true;
+    pts = [p];
+    lineStart = (state.tool === 'line') ? p : null;
+    if(!lineStart){
+      last = { x: p.x*ink.width, y: p.y*ink.height };
+      const ctx = ink.getContext('2d');
+      styleCur(ctx); ctx.beginPath();
+      ctx.arc(last.x, last.y, ctx.lineWidth/2, 0, 7); ctx.fill();
+    }
+  });
+  ink.addEventListener('pointermove', e => {
+    if(e.pointerType === 'pen' || e.pointerType === 'eraser'){
+      lastPenDown = Date.now();
+    }
+    if(erasing){
+      const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
+      for(const ev of evs) eraseAt(pos(ev));
+      return;
+    }
+    if(textDrag){
+      const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
+      const p = pos(evs[evs.length-1]);
+      const dx = p.x - textDrag.ox, dy = p.y - textDrag.oy;
+      if(!textDrag.moved && Math.hypot(dx, dy) > 0.015) textDrag.moved = true;
+      if(textDrag.moved){
+        textDrag.tx.x = Math.min(1, Math.max(0, textDrag.sx0 + dx));
+        textDrag.tx.y = Math.min(1, Math.max(0, textDrag.sy0 + dy));
+        redrawInk();
+      }
+      return;
+    }
+    if(!drawing) return;
+    const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
+    if(lineStart){
+      const q = pos(evs[evs.length-1]);
+      redrawInk([lineStart, q]);
+      return;
+    }
+    const ctx = ink.getContext('2d');
+    styleCur(ctx);
+    for(const ev of evs){
+      const p = pos(ev); pts.push(p);
+      const q = { x: p.x*ink.width, y: p.y*ink.height };
+      ctx.beginPath(); ctx.moveTo(last.x, last.y); ctx.lineTo(q.x, q.y); ctx.stroke();
+      last = q;
+    }
+  });
+  const finish = async () => {
+    if(erasing){ erasing = false; state._drawingNow = false; return; }
+    if(textDrag){
+      const td = textDrag; textDrag = null;
+      if(td.moved){
+        const { error } = await db.rpc('update_text', {
+          p_edit_pw: epw(), p_text_id: td.tx.id,
+          p_x: td.tx.x, p_y: td.tx.y });
+        if(error){
+          toast(dbErrMsg(error));
+          td.tx.x = td.sx0; td.tx.y = td.sy0; redrawInk();
+        }else toast(t('textMovedOk'));
+      }else openTextDialog(td.tx);
+      return;
+    }
+    if(!drawing) return;
+    drawing = false; state._drawingNow = false;
+    if(lineStart && pts.length >= 1){
+      redrawInk([lineStart, pts[pts.length-1]]);
+      pts = [lineStart, pts[pts.length-1]];
+    }
+    if(pts.length < 1 || !state.liveScoreId){ redrawInk(); return; }
+    const kind = (state.tool === 'hl') ? 'HL'
+      : (state.tool === 'line') ? (state.dash ? 'LD' : 'LN')
+      : (state.dash ? 'DS' : 'P');
+    const r = await db.rpc('add_stroke', {
+      p_edit_pw: epw(), p_score_id: state.liveScoreId,
+      p_page: state.currentPage, p_name: state.myName,
+      p_color: encodeStroke(kind, COLORS[state.drawColor], state.thick),
+      p_points: pts });
+    if(r.error){
+      toast(dbErrMsg(r.error));
+      redrawInk(); return;
+    }
+    state.strokes.push({ id: r.data, drawer_name: state.myName,
+      color: encodeStroke(kind, COLORS[state.drawColor], state.thick), points: pts });
+    redrawInk();
+  };
+  ink.addEventListener('pointerup', e => {
+    if(e.pointerType === 'pen' || e.pointerType === 'eraser'){
+      lastPenDown = Date.now();
+      setTempErase(false);
+    }
+    finish();
+  });
+  ink.addEventListener('pointercancel', e => {
+    if(e.pointerType === 'pen' || e.pointerType === 'eraser') setTempErase(false);
+    cancel();
+  });
+  function styleCur(ctx){
+    const ps = parseStroke(encodeStroke(
+      (state.tool === 'hl') ? 'HL' : (state.dash ? 'DS' : 'P'),
+      COLORS[state.drawColor], state.thick));
+    ctx.strokeStyle = ps.hex; ctx.fillStyle = ps.hex;
+    ctx.lineWidth = segWidth(ink, ps.th, ps.kind);
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.globalAlpha = (state.tool === 'hl') ? 0.35 : 1;
+    ctx.setLineDash([]);
+  }
+  async function commitStamp(p){
+    state._drawingNow = true;
+    const kind = (state.tool === 'stampDown') ? 'Π' : 'V';
+    const enc = encodeStroke(kind, COLORS[state.drawColor], state.thick, state.stampScale);
+    const r = await db.rpc('add_stroke', {
+      p_edit_pw: epw(), p_score_id: state.liveScoreId,
+      p_page: state.currentPage, p_name: state.myName,
+      p_color: enc, p_points: [p] });
+    if(r.error){
+      toast(dbErrMsg(r.error));
+    }else{
+      state.strokes.push({ id: r.data, drawer_name: state.myName, color: enc, points: [p] });
+      redrawInk();
+    }
+    state._drawingNow = false;
+  }
+}
+async function undoStroke(){
+  if(!canEdit()){ toast(t('needEdit')); return; }
+  const mine = state.strokes.filter(isMine);
+  if(!mine.length){ toast(t('nothingUndo')); return; }
+  const lastS = mine[mine.length - 1];
+  const { error } = await db.rpc('delete_stroke',
+    { p_edit_pw: epw(), p_stroke_id: lastS.id });
+  if(error){ toast(dbErrMsg(error)); return; }
+  state.strokes = state.strokes.filter(s => s.id !== lastS.id);
+  redrawInk(); toast(t('undoOk'));
+}
+
+/* ================= 列印 / 匯出 ================= */
+function openPrintPop(){
+  const pop = $('printPop'); if(!pop) return;
+  pop.style.display = 'block';
+  $('printProg').textContent = '';
+  const sl = localStorage.getItem('printLayer'), ss = localStorage.getItem('printScope');
+  if(sl){
+    const el = document.querySelector('input[name=pl][value="'+sl+'"]');
+    if(el) el.checked = true;
+  }
+  if(ss){
+    const el = document.querySelector('input[name=ps][value="'+ss+'"]');
+    if(el) el.checked = true;
+  }
+}
+function closePrintPop(){
+  const pop = $('printPop'); if(pop) pop.style.display = 'none';
+}
+function getPrintOpts(){
+  return {
+    layer: document.querySelector('input[name=pl]:checked').value,
+    scope: document.querySelector('input[name=ps]:checked').value
+  };
+}
+function savePrintOpts(o){
+  localStorage.setItem('printLayer', o.layer);
+  localStorage.setItem('printScope', o.scope);
+}
+async function fetchLayers(){
+  const strokesBy = {}, textsBy = {};
+  try{
+    const a = await db.from('strokes').select('*')
+      .eq('score_id', state.liveScoreId).order('created_at');
+    (a.data||[]).forEach(s => { (strokesBy[s.page] = strokesBy[s.page]||[]).push(s); });
+    const b = await db.from('texts').select('*')
+      .eq('score_id', state.liveScoreId).order('created_at');
+    (b.data||[]).forEach(x => { (textsBy[x.page] = textsBy[x.page]||[]).push(x); });
+  }catch(e){}
+  return { strokesBy, textsBy };
+}
+async function compositePage(n, layer, strokesBy, textsBy){
+  const page = await state.pdf.getPage(n);
+  const v1 = page.getViewport({ scale: 1 });
+  const scale = 1600 / v1.width;
+  const vp = page.getViewport({ scale });
+  const cv = document.createElement('canvas');
+  cv.width = Math.round(1600);
+  cv.height = Math.round(v1.height * scale);
+  const c = cv.getContext('2d');
+  c.fillStyle = '#fff'; c.fillRect(0, 0, cv.width, cv.height);
+  await page.render({ canvasContext: c, viewport: vp }).promise;
+  if(layer !== 'text') (strokesBy[n]||[]).forEach(s => drawPath(c, s, cv.width, cv.height));
+  if(layer !== 'bow') (textsBy[n]||[]).forEach(x => drawTextAt(c, x, cv.width, cv.height));
+  return cv;
+}
+async function doPrint(){
+  if(!state.pdf || !state.liveScoreId) return;
+  const opts = getPrintOpts(); savePrintOpts(opts);
+  const pages = (opts.scope === 'all')
+    ? Array.from({ length: state.numPages }, (_, i) => i + 1)
+    : [state.currentPage];
+  const { strokesBy, textsBy } = await fetchLayers();
+  const area = $('printArea'); area.innerHTML = '';
+  closePrintPop();
+  for(let i = 0; i < pages.length; i++){
+    toast(t('printing') + ' ' + (i+1) + '/' + pages.length);
+    try{
+      const cv = await compositePage(pages[i], opts.layer, strokesBy, textsBy);
+      const img = document.createElement('img');
+      img.src = cv.toDataURL('image/jpeg', 0.88);
+      area.appendChild(img);
+    }catch(e){}
+  }
+  document.body.classList.add('printing');
+  setTimeout(() => { try{ window.print(); }catch(e){} }, 120);
+  setTimeout(() => {
+    document.body.classList.remove('printing');
+    area.innerHTML = '';
+  }, 90000);
+}
+async function doExport(){
+  if(!state.pdf || !state.liveScoreId) return;
+  if(!window.jspdf || !window.jspdf.jsPDF){ toast(t('noPdfLib')); return; }
+  const opts = getPrintOpts(); savePrintOpts(opts);
+  const pages = (opts.scope === 'all')
+    ? Array.from({ length: state.numPages }, (_, i) => i + 1)
+    : [state.currentPage];
+  const { strokesBy, textsBy } = await fetchLayers();
+  closePrintPop();
+  const { jsPDF } = window.jspdf;
+  let doc = null;
+  const title = (($('vTitle') && $('vTitle').textContent) || 'score')
+    .replace(/[\\/:*?"<>|]/g, '_').slice(0, 60);
+  for(let i = 0; i < pages.length; i++){
+    toast(t('printing') + ' ' + (i+1) + '/' + pages.length);
+    try{
+      const cv = await compositePage(pages[i], opts.layer, strokesBy, textsBy);
+      const orient = cv.width > cv.height ? 'l' : 'p';
+      if(!doc) doc = new jsPDF({ orientation: orient, unit:'pt', format:'a4' });
+      else doc.addPage('a4', orient);
+      const pw = doc.internal.pageSize.getWidth();
+      const ph = doc.internal.pageSize.getHeight();
+      const m = 10;
+      const r = Math.min((pw - 2*m) / cv.width, (ph - 2*m) / cv.height);
+      doc.addImage(cv.toDataURL('image/jpeg', 0.86), 'JPEG',
+        (pw - cv.width*r) / 2, (ph - cv.height*r) / 2, cv.width*r, cv.height*r);
+    }catch(e){}
+  }
+  if(doc) doc.save(title + '.pdf');
+  toast(t('exportDone'));
+}
+window.addEventListener('afterprint', () => {
+  document.body.classList.remove('printing');
+  const area = $('printArea'); if(area) area.innerHTML = '';
+});
+
+/* ================= 手勢 ================= */
+let stageBound = false;
+let pinchS = null, justPinched = false;
+function setupStageGestures(){
+  const stage = $('stage');
+  if(stageBound || !stage) return;
+  stageBound = true;
+  stage.addEventListener('touchstart', e => {
+    if(e.touches.length === 2){
+      if(window.__cancelDraw) window.__cancelDraw();
+      const t0 = e.touches[0], t1 = e.touches[1];
+      const dx = t0.clientX - t1.clientX, dy = t0.clientY - t1.clientY;
+      pinchS = { d0: Math.hypot(dx, dy) || 1, z0: state.zoom,
+        mx: (t0.clientX + t1.clientX)/2, my: (t0.clientY + t1.clientY)/2,
+        sl: stage.scrollLeft, st: stage.scrollTop };
+      justPinched = true;
+      return;
+    }
+    if(e.touches.length === 1){
+      stage._sx = e.touches[0].clientX;
+      stage._moved = false;
+    }
+  }, { passive:true });
+  stage.addEventListener('touchmove', e => {
+    if(pinchS && e.touches.length === 2){
+      e.preventDefault();
+      const t0 = e.touches[0], t1 = e.touches[1];
+      const dist = Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY);
+      const z = Math.max(1, Math.min(ZOOM_MAX, pinchS.z0 * dist / pinchS.d0));
+      state.zoom = z;
+      const wrap = $('zoomWrap');
+      if(wrap) wrap.style.transform = `scale(${z})`;
+      const mx = (t0.clientX + t1.clientX)/2, my = (t0.clientY + t1.clientY)/2;
+      stage.scrollLeft = Math.max(0, pinchS.sl - (mx - pinchS.mx));
+      stage.scrollTop  = Math.max(0, pinchS.st - (my - pinchS.my));
+      updateZoomUI();
+      return;
+    }
+    if(e.touches.length === 1 && typeof stage._sx === 'number'){
+      if(Math.abs(e.touches[0].clientX - stage._sx) > 50) stage._moved = true;
+    }
+  }, { passive:false });
+  stage.addEventListener('touchend', e => {
+    if(pinchS && e.touches.length < 2){
+      pinchS = null;
+      commitZoom();
+      return;
+    }
+    if(justPinched){
+      if(e.touches.length === 0) justPinched = false;
+      return;
+    }
+    if(state.tool && canEdit()) return;
+    if(state.zoom > 1) return;
+    if(!e.changedTouches.length) return;
+    e.preventDefault();
+    const x = e.changedTouches[0].clientX;
+    const sx = stage._sx;
+    if(typeof sx === 'number' && !stage._moved){
+      const w = stage.clientWidth;
+      if(x > w * 0.66) goTo(state.currentPage + 1);
+      else if(x < w * 0.33) goTo(state.currentPage - 1);
+    }else if(typeof sx === 'number'){
+      const dx = x - sx;
+      if(dx < -60) goTo(state.currentPage + 1);
+      else if(dx > 60) goTo(state.currentPage - 1);
+    }
+  });
+  stage.addEventListener('click', e => {
+    if(justPinched){ justPinched = false; return; }
+    if(state.tool && canEdit()) return;
+    if(state.zoom > 1) return;
+    const w = stage.clientWidth;
+    if(e.clientX > w * 0.66) goTo(state.currentPage + 1);
+    else if(e.clientX < w * 0.33) goTo(state.currentPage - 1);
+  });
+  document.addEventListener('keydown', e => {
+    if(!inViewerPage()) return;
+    if(e.key === 'ArrowRight') goTo(state.currentPage + 1);
+    if(e.key === 'ArrowLeft') goTo(state.currentPage - 1);
+    if(e.key === 'Escape' && state.fsMode) toggleFullscreen();
+  });
+}
+
+let resizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    fitHeader();
+    if(inViewerPage() && state.pdf){
+      renderPage(state.currentPage).then(() => Promise.all([loadStrokes(), loadTexts()]));
+    }
+  }, 300);
+});
+
+/* ================= 說明（詳細版） ================= */
+function renderHelp(){
+  const zh = lang === 'zh';
+  $('appTitle').textContent = t('appTitle');
+  $('langBtn').textContent = (zh) ? 'EN' : '中';
+  const H = zh ? {
+    gate:`<div class="step">1️⃣ 開啟網址 → 出現 🔒 畫面</div>
+      <div class="step">2️⃣ 輸入<b>進站密碼</b>（由總監／譜務統一發放給全團）</div>
+      <div class="step">3️⃣ 通過後自動記住，之後打開網站直接進入</div>
+      <div class="step">4️⃣ 想登出：右上角「你的身份」→ 拉到底「🚪 登出」</div>
+      忘記密碼？聯絡總監。`,
+    roles:`進站後默認是<b>👤 團員</b>。點擊<b>右上角身份按鈕</b>切換身份：<br>
+      <table class="tbl"><tr><th>權限</th><th>👤團員</th><th>✍️聲部長</th><th>🛡️總監</th></tr>
+      <tr><td>檢視全部樂譜／公告／跟廣播</td><td>✅</td><td>✅</td><td>✅</td></tr>
+      <tr><td>翻頁·縮放·全螢幕·列印</td><td>✅</td><td>✅</td><td>✅</td></tr>
+      <tr><td>圖層對比（疊加檢視）</td><td>✅</td><td>✅</td><td>✅</td></tr>
+      <tr><td>畫弓法·文字·白油（任何譜）</td><td>—</td><td>✅</td><td>✅</td></tr>
+      <tr><td>上載／刪除自己圖層</td><td>—</td><td>✅</td><td>✅</td></tr>
+      <tr><td>開始／停止廣播</td><td>—</td><td>✅</td><td>✅</td></tr>
+      <tr><td>公告欄：新增／編輯／刪除公告</td><td>—</td><td>✅</td><td>✅</td></tr>
+      <tr><td>擦改任何人標註·清全頁（含文字）</td><td>—</td><td>—</td><td>✅</td></tr>
+      <tr><td>檔案總管（上載/改名/剪貼/刪除/資料夾）</td><td>—</td><td>—</td><td>✅</td></tr>
+      <tr><td>系統管理（改密碼·清名額）</td><td>—</td><td>—</td><td>✅</td></tr></table>
+      <b>啟用聲部長</b>：身份選單 →「✍️ 成為聲部長」→ 輸入編輯密碼（最多 2 人同時）。第 1 位＝👑主控（翻頁會廣播），第 2 位＝🤝協作。<br>
+      <b>啟用總監</b>：身份選單 →「🛡️ 成為總監」→ 輸入譜務密碼。<br>
+      <b>退出</b>：身份選單 →「🚪 退出身份」即變回團員（會釋放編輯名額）。`,
+    files:`樂譜庫像 Windows 檔案總管，以<b>資料夾層級</b>管理：<br>
+      <div class="step">📁 層級示例：🏠樂譜庫 › 20260120音樂會 › Brahms › Violin › 1stViolin</div>
+      <b>導航</b>：點擊頂部麵包屑（🏠樂譜庫 › …）任何一層即跳過去。<br>
+      <b>總監操作</b>：<br>
+      • <b>➕ 新增資料夾</b>：在當前層建立子資料夾<br>
+      • <b>📄 上載 PDF</b>：上載到當前所在資料夾<br>
+      • <b>長按／右鍵</b> 譜卡或資料夾 → 彈出選單：<br>
+      &nbsp;&nbsp;👁️ 檢視／📻 廣播／✏️ 重新命名／✂️ 剪下／📄 複製／🗑️ 刪除<br>
+      <b>剪下→貼上（移動）</b>：長按項目 → ✂️剪下 → 進入目標資料夾 → 按「📋 貼上」<br>
+      <b>複製→貼上</b>：同上但選 📄複製（會出現「(副本)」）<br>
+      <b>刪除資料夾</b>：必須先清空裡面所有內容<br>
+      團員（未啟用身份）長按只能檢視。`,
+    ann:`主頁頂部有兩個分頁按鈕：<b>📚 樂譜庫</b>（左）和 <b>📢 公告欄</b>（右）。點擊即互相切換內容範圍。<br>
+      <b>所有人</b>都可以閱讀全部公告（包括歷史公告）。<br>
+      <b>聲部長／總監</b>可以：<br>
+      • <b>➕ 新增公告</b>：輸入標題＋內容（可換行）<br>
+      • <b>📌 釘選</b>：釘選的公告會固定排在最頂（適合長期通知）<br>
+      • <b>✏️ 編輯</b>：修改任何公告的標題／內容／釘選狀態<br>
+      • <b>🗑️ 刪除</b>：移除過時公告<br>
+      公告會即時同步到所有成員的裝置。`,
+    view:`<b>開啟樂譜</b>：樂譜庫 → 撳「👁️ 檢視」或點擊卡片。<br>
+      <b>翻頁（4 種方法）</b>：<br>
+      • 點擊畫面<b>右側 1/3</b>＝下一頁、<b>左側 1/3</b>＝上一頁<br>
+      • 手指<b>左右滑動</b><br>
+      • 底部 <b>◀ ▶</b> 按鈕<br>
+      • 鍵盤 <b>← →</b> 方向鍵<br>
+      <b>縮放</b>：兩指張開放大（最高 5×）、收合縮小；放大後可拖動瀏覽；按「🔍 1×」還原。<br>
+      <b>全螢幕</b>：「⛶ 全螢幕」按鈕；退出按右上「✕」或 ESC。<br>
+      <b>跟隨主控</b>：如果此譜正在廣播，出現「⇢ 跳至主控頁」按鈕——迷路時點一下即回到主控目前頁面。`,
+    edit:`前提：<b>先啟用聲部長或總監身份</b>（右上角身份選單）。<br>
+      <b>重要</b>：編輯與廣播<b>無關</b>——任何樂譜（不管有沒有廣播）打開就能編輯！<br>
+      <div class="step">1️⃣ 打開樂譜 → 展開「✍️ 弓法編輯」組（或按右下 🛠️ 浮動按鈕）</div>
+      <div class="step">2️⃣ 揀工具：✍️畫筆（實線）｜🖍️螢光筆（半透明粗）｜┄虛線模式開關｜╱直線（兩點拉直）｜Π（下弓記號）｜V（上弓記號）｜🧽擦除（點一下筆跡即刪）｜📝文字</div>
+      <div class="step">3️⃣ 揀顏色（圓點）；● 按鈕調粗細（0.5–12px）與 Π/V 大小</div>
+      <div class="step">4️⃣ <b>手指／S Pen／Apple Pencil／滑鼠全部可以畫</b>，粗細完全一致——以「● 粗細」滑桿為準，壓感不影響粗細</div>
+      <div class="step">5️⃣ 畫錯三步：<b>↩️ 復原最後一筆</b>｜<b>🧽 點擦</b>｜<b>🧹 清除本頁我的</b>（30 秒內可按「↩️ 復原清除」救回）</div>
+      <b>👑 總監「清除全頁弓法＋文字」</b>：展開「👑 總監工具」→ 該頁所有弓法<b>與文字標註</b>一併清除，30 秒內可復原（兩者都救得返）。<br>
+      <b>🛠️ 浮動按鈕</b>：可以<b>拖動</b>到任何位置（位置會記住）；<b>點一下</b>彈出 ↩️🧽🧹 三粒快速掣；再點收起。<br>
+      <b>🖊️ S Pen 快捷擦除</b>：<b>按住筆桿上的按鈕</b>再點筆跡＝立即變成點擦模式（🧽 亮金框）；<b>放開按鈕</b>自動返回原本工具繼續畫。筆尾擦膠端同樣有效。<br>
+      <b>🖐️ 手掌防誤觸</b>：用筆寫字時手掌放喺螢幕上唔會畫花（筆接觸後 2 秒內手掌 touch 會被忽略）；淨用手指時一切正常。<br>
+      <b>白油（🧴白色）</b>：譜上已有印刷弓法想改？揀白色畫筆蓋住舊弓法，再揀其他色畫新的。白色筆跡照樣可擦除。<br>
+      <b>文字標註</b>：揀 📝 → 點空白處 → 輸入文字、調字體大小顏色 → ✅儲存。點文字＝編輯內容；拖曳文字＝移動位置。<br>
+      <b>隱私</b>：你畫的筆跡有淡色光環（只有你自己裝置看到），方便辨認哪些是你畫的。<br>
+      <b>權限</b>：只能刪改自己的標註；總監可以刪改任何人的。`,
+    layers:`<b>用途</b>：聲部長把自己印好弓法的同一份譜 PDF 上載為「圖層」，半透明疊在原譜上對比。<br>
+      <div class="step">1️⃣ 打開樂譜 → 「📄 檢視工具」→ 🗂️ 圖層</div>
+      <div class="step">2️⃣ 「⬆️ 上載我的圖層」→ 輸入圖層名（如：小提琴Ⅰ 弓法）→ 揀 PDF</div>
+      <div class="step">3️⃣ ⚠️ 頁數必須與原譜完全相同，否則拒絕上載</div>
+      <div class="step">4️⃣ 圖層列表中點選名稱 → 該 PDF 半透明疊上原譜</div>
+      <div class="step">5️⃣ 拖「圖層透明度」滑桿調整深淺（10%–100%）</div>
+      <div class="step">6️⃣ 揀回「原譜」＝完全遮住圖層，睇乾淨原譜編輯</div>
+      規則：<b>同時只能啟用一個圖層</b>；列印／匯出<b>不包含</b>圖層；只能刪自己上載的（總監可刪任何）。所有人（包括團員）都能開圖層來看。`,
+    broadcast:`<b>咩係廣播</b>：把某一樂譜「推」給全團——所有成員打開網站即見到此譜；主控翻頁大家可即時跟隨。<br>
+      <b>開始廣播</b>：<br>
+      <div class="step">1️⃣ 打開要廣播的樂譜</div>
+      <div class="step">2️⃣ 「📄 檢視工具」→「📻 廣播此譜」→ 確認</div>
+      <div class="step">3️⃣ 按鈕變紅閃爍「⏹️ 停止廣播」＋頂欄出現「● LIVE」紅色閃燈＝成功</div>
+      <b>主控 vs 協作</b>：第一位啟用聲部長者是👑主控（翻頁會同步給全團）；第二位是🤝協作（可編輯，但翻頁只影響自己）。主控離開約 45 秒後，協作可在身份選單「👑 接管主控」。<br>
+      <b>成員跟頁</b>：任何時候點「⇢ 跳至主控頁」即跳到主控目前頁面。你也可以自由翻頁瀏覽。<br>
+      <b>停止廣播（3 個地方）</b>：<br>
+      • 檢視工具組：紅色閃爍按鈕「⏹️ 停止廣播」<br>
+      • <b>右上角身份選單</b>：頂部紅框顯示「📻 廣播中：{譜名}」＋「⏹️ 關閉廣播」按鈕<br>
+      • 可以在任何譜按「📻 改為廣播此譜」直接切換廣播目標<br>
+      <b>廣播與編輯獨立</b>：停止廣播後，編輯權不變——照樣可以畫弓法。`,
+    print:`<b>列印</b>：「📄 檢視工具」→ 🖨️ 列印：<br>
+      • <b>內容</b>：弓法＋文字／僅弓法／僅文字／乾淨原譜<br>
+      • <b>範圍</b>：當前頁／整份樂譜<br>
+      按「🖨️ 列印」用瀏覽器列印；按「⬇️ 匯出 PDF」下載檔案（可分享給團員）。<br>
+      ⚠️ 列印／匯出<b>不包含圖層</b>（圖層只供畫面對比）。`,
+    sys:`總監在樂譜庫頁展開「⚙️ 系統管理」：<br>
+      • <b>🔑 進站密碼</b>：全團進入網站的密碼<br>
+      • <b>🔑 編輯密碼</b>：聲部長啟用編輯的密碼<br>
+      • <b>🔑 譜務密碼</b>：總監身份＋檔案管理的密碼<br>
+      • <b>🧹 清除全部名額</b>：強制釋放所有編輯者位置（例如有人關機沒退出）<br>
+      ⚠️ 改密碼後，所有裝置需要重新輸入新密碼。`,
+    faq:`<b>Q：看不到編輯工具？</b><br>A：先啟用聲部長／總監身份（右上角身份選單）。<br><br>
+      <b>Q：手指畫不到？</b><br>A：確認已揀選繪畫工具（✍️／🖍️ 等）；如果啱啱用完筆，等 2 秒再試（手掌防誤觸窗口）。<br><br>
+      <b>Q：筆跡比手指粗？</b><br>A：已徹底修復——手指／筆／滑鼠粗細 100% 一致，由「● 粗細」滑桿決定。之前畫的粗筆劃請用 🧽 擦掉重畫。<br><br>
+      <b>Q：總監「清除全頁」會連文字都刪？</b><br>A：會——弓法＋文字標註一併清除，30 秒內按「↩️ 復原清除」可以全部救回。<br><br>
+      <b>Q：提示「已有兩位聲部長在線」？</b><br>A：等對方關 app 約 45 秒自動釋放，或請對方「🚪 退出身份」，或請總監「🧹 清除全部名額」。<br><br>
+      <b>Q：S Pen 按鈕擦除沒反應？</b><br>A：確認筆桿按鈕按住的同時筆尖接觸螢幕；若其他 app 重新定義了按鈕功能，需在系統 S Pen 設定檢查。<br><br>
+      <b>Q：公告欄在哪？</b><br>A：主頁頂部「📢 公告欄」分頁；所有人可看，聲部長／總監可發佈、編輯、釘選、刪除。<br><br>
+      <b>Q：廣播中但看不到 LIVE？</b><br>A：LIVE 只顯示在你正在看的那份廣播譜。其他譜會顯示「📻 改為廣播此譜」。<br><br>
+      <b>Q：上載圖層失敗？</b><br>A：PDF 頁數必須與原譜完全一致。<br><br>
+      <b>Q：清除後後悔？</b><br>A：30 秒內點畫面下方「↩️ 復原清除」。`
+  } : {
+    gate:`<div class="step">1️⃣ Open the URL → 🔒 screen</div>
+      <div class="step">2️⃣ Enter the <b>gate password</b></div>
+      <div class="step">3️⃣ Remembered — next visits go straight in</div>
+      <div class="step">4️⃣ Logout: role menu → 🚪 Logout</div>`,
+    roles:`Default is <b>👤 Member</b>. Tap the role button (top right):<br>
+      <table class="tbl"><tr><th>Permission</th><th>Member</th><th>Leader</th><th>Chief</th></tr>
+      <tr><td>View scores/notices/broadcast</td><td>✅</td><td>✅</td><td>✅</td></tr>
+      <tr><td>Pages·zoom·fullscreen·print</td><td>✅</td><td>✅</td><td>✅</td></tr>
+      <tr><td>Layer compare</td><td>✅</td><td>✅</td><td>✅</td></tr>
+      <tr><td>Draw·text·whiteout (any score)</td><td>—</td><td>✅</td><td>✅</td></tr>
+      <tr><td>Own layers</td><td>—</td><td>✅</td><td>✅</td></tr>
+      <tr><td>Start/stop broadcast</td><td>—</td><td>✅</td><td>✅</td></tr>
+      <tr><td>Notices: add/edit/delete</td><td>—</td><td>✅</td><td>✅</td></tr>
+      <tr><td>Edit anyone·clear page (incl. texts)</td><td>—</td><td>—</td><td>✅</td></tr>
+      <tr><td>File manager</td><td>—</td><td>—</td><td>✅</td></tr>
+      <tr><td>System admin</td><td>—</td><td>—</td><td>✅</td></tr></table>
+      Become leader: edit password (max 2). Chief: librarian password. Exit anytime.`,
+    files:`Library works like Windows Explorer with folders. Navigate via breadcrumbs. Chief: ➕ New folder, 📄 Upload here, <b>long-press/right-click</b> for menu. Cut→navigate→Paste to move. Empty a folder before deleting.`,
+    ann:`Home top has two tabs: <b>📚 Library</b> and <b>📢 Notices</b>. Everyone reads all notices. Leaders/Chief can add, 📌 pin, ✏️ edit, 🗑️ delete. Notices sync in real time.`,
+    view:`Open: tap 👁️ View. <b>Turn pages</b>: tap right/left third, swipe, ◀▶, arrow keys. <b>Zoom</b>: pinch (5× max), 🔍 resets. <b>Fullscreen</b>: ⛶. <b>Jump to master</b> appears when live.`,
+    edit:`Enable leader/chief first. <b>Editing is independent of broadcast</b>.<br>
+      <div class="step">1️⃣ Open ✍️ group (or 🛠️ FAB)</div>
+      <div class="step">2️⃣ Tools: ✍️pen | 🖍️highlighter | ┄dashed | ╱line | Π/V stamps | 🧽tap-erase | 📝text</div>
+      <div class="step">3️⃣ Color dots; ● thickness & stamp size</div>
+      <div class="step">4️⃣ <b>Finger / stylus / mouse all draw identically</b> — width from the ● slider only</div>
+      <div class="step">5️⃣ Fix: <b>↩️undo</b> | <b>🧽erase</b> | <b>🧹clear mine</b> (30s undo)</div>
+      <b>👑 Chief "Clear all (bowings + texts)"</b>: clears every stroke AND text note on the page; undo within 30s restores both.<br>
+      🛠️ FAB: <b>draggable</b>, tap for ↩️🧽🧹 minis.<br>
+      <b>🖊️ S Pen shortcut</b>: hold barrel button + tap stroke = instant erase; release to restore.<br>
+      <b>🖐️ Palm guard</b>: while writing with pen, resting palm won't draw (2s window).`,
+    layers:`Leaders upload their marked PDF (same page count!) as a layer. 🗂️ Layers → ⬆️ Upload → name → file. Select to overlay; adjust opacity; "Original" hides. One at a time. Not in print/export.`,
+    broadcast:`Start: open score → 📻 Broadcast → confirm → blinking red + ● LIVE. Master turns sync; Co edits only. <b>Stop (3 places)</b>: red button / role menu red box / switch score. Editing survives.`,
+    print:`🖨️ Print: content × range. Export PDF to share. Layers NOT included.`,
+    sys:`Chief → ⚙️ System admin: change gate/edit/librarian passwords, clear slots.`,
+    faq:`<b>Q: Finger can't draw?</b> Pick a tool first; or wait 2s after pen use (palm guard).<br><br>
+      <b>Q: Does Chief "Clear all" include texts?</b> Yes — strokes + text notes, undo within 30s restores both.<br><br>
+      <b>Q: Where are notices?</b> Home top → 📢 Notices tab.<br><br>
+      <b>Q: Undo a clear?</b> Within 30s.`
+  };
+  $('view').innerHTML = `
+  <a class="pill" href="#/library" style="text-decoration:none">${t('backLib')}</a>
+  <h2 style="margin:14px 0">${t('helpTitle')}</h2>
+
+  <details open><summary>1️⃣ ${zh?'進入網站（進站密碼）':'Gate'}</summary><div>${H.gate}</div></details>
+  <details><summary>2️⃣ ${zh?'身份與權限':'Roles'}</summary><div>${H.roles}</div></details>
+  <details><summary>3️⃣ ${zh?'樂譜庫（檔案總管）':'Library / Files'}</summary><div>${H.files}</div></details>
+  <details><summary>📢 ${zh?'公告欄':'Notices'}</summary><div>${H.ann}</div></details>
+  <details><summary>4️⃣ ${zh?'檢視樂譜（翻頁·縮放·全螢幕）':'Viewing'}</summary><div>${H.view}</div></details>
+  <details><summary>5️⃣ ${zh?'編輯弓法（聲部長／總監）':'Bowing tools'}</summary><div>${H.edit}</div></details>
+  <details><summary>6️⃣ ${zh?'圖層對比':'Layer compare'}</summary><div>${H.layers}</div></details>
+  <details><summary>7️⃣ ${zh?'廣播模式':'Broadcast'}</summary><div>${H.broadcast}</div></details>
+  <details><summary>8️⃣ ${zh?'列印／匯出':'Print / Export'}</summary><div>${H.print}</div></details>
+  <details><summary>9️⃣ ${zh?'系統管理（總監）':'System admin'}</summary><div>${H.sys}</div></details>
+  <details><summary>🔟 FAQ 常見問題</summary><div>${H.faq}</div></details>
+  <details><summary>🌐 ${zh?'語言':'Language'}</summary><div>
+    ${zh ? '右上角「EN」任何頁面切換。' : 'Tap "中" (top right).'}
+  </div></details>`;
+}
+
+/* ================= Realtime ================= */
+db.channel('live-broadcast')
+  .on('postgres_changes', { event:'*', schema:'public', table:'broadcast' }, async () => {
+    if(inViewerPage()){
+      const prevLive = state.isLiveHere;
+      await applyBroadcastState();
+      if(!prevLive && state.isLiveHere){
+        await goTo(state.masterPage, false);
+      }
+    }
+    else if(isHome()){
+      if(gatePassed()) renderHome();
+    }
+  })
+  .on('postgres_changes', { event:'*', schema:'public', table:'strokes' }, () => {
+    if(inViewerPage()) loadStrokes();
+  })
+  .on('postgres_changes', { event:'*', schema:'public', table:'texts' }, () => {
+    if(inViewerPage()) loadTexts();
+  })
+  .on('postgres_changes', { event:'*', schema:'public', table:'layers' }, () => {
+    if(state.liveScoreId) loadLayers(state.liveScoreId);
+  })
+  .on('postgres_changes', { event:'*', schema:'public', table:'editors' }, () => {
+    if(state.isEditor) heartbeat();
+  })
+  .on('postgres_changes', { event:'*', schema:'public', table:'announcements' }, () => {
+    if(isHome() && state.homeTab === 'ann') renderAnnBoard();
+  })
+  .subscribe();
+
+/* ================= 啟動 ================= */
+(async function boot(){
+  const apw = localStorage.getItem('adminPw');
+  const cpw = localStorage.getItem('chiefPw');
+  const pw = apw || cpw;
+  if(pw){
+    try{
+      const { data } = await db.rpc('verify_admin_pw', { p_admin_pw: pw });
+      if(data){
+        state.adminPw = pw;
+        state.isChief = true;
+        if(!apw) localStorage.setItem('adminPw', pw);
+      }else{
+        localStorage.removeItem('adminPw');
+        localStorage.removeItem('chiefPw');
+      }
+    }catch(e){}
+  }
+  if(!gatePassed()) renderGate();
+  else{
+    $('roleBtn').style.display = 'inline-flex';
+    updateRoleUI();
+    if(!location.hash) location.hash = '#/library';
+    route();
+  }
+})();
+</script>
+</body>
+</html>
