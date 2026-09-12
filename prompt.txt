@@ -1,0 +1,79 @@
+You are a senior full-stack engineer. Build a complete, production-ready web
+app called "Orchestra Stand" — a free digital music stand for amateur
+orchestras. Deliver: (1) one idempotent SQL script for Supabase (Postgres),
+and (2) ONE self-contained index.html file.
+
+TECH CONSTRAINTS
+- index.html fully self-contained: inline CSS + JS; CDN imports only:
+  @supabase/supabase-js@2, pdf.js 3.x, jspdf 2.x.
+- Backend: Supabase. Tables with RLS enabled (public SELECT only); ALL writes
+  go through SECURITY DEFINER RPC functions that verify a password and raise
+  exception 'WRONG_PASSWORD' on failure. Enable the supabase_realtime
+  publication for tables: broadcast, strokes, texts, layers, editors,
+  announcements. Storage: public bucket "scores" for PDFs.
+- App constants at top: SUPABASE_URL, SUPABASE_KEY.
+
+ROLES & SECURITY (password-based, no auth service)
+- Gate password: shared site-entry password (app_passwords table), verified by
+  RPC verify_gate_pw, remembered in localStorage.
+- Edit password: unlocks Section Leader via claim_editor RPC. Max 2 concurrent
+  editors in an editors table (slots 1,2), 15s heartbeats, stale slots
+  reclaimable after 45s; slot 1 = broadcast master, slot 2 = co-editor;
+  heartbeat_editor / release_editor RPCs. The admin password must also pass
+  all edit checks (fn_edit_ok accepts edit OR admin password).
+- Admin password: unlocks Chief (file manager + system admin) via
+  verify_admin_pw. Admin-only RPCs: create_score_ex, delete_score,
+  rename_score, move_score_to, copy_score, folder_create, folder_rename,
+  folder_delete (must be empty; error FOLDER_NOT_EMPTY), folder_move
+  (recursive cycle check; error BAD_TARGET), set_gate_password,
+  set_edit_password, set_admin_password, clear_editors.
+
+CORE FEATURES
+1. Score library with folder hierarchy + breadcrumbs, long-press / right-click
+   action menus, cut/copy/paste via localStorage, batch PDF upload reading
+   page count client-side with pdf.js before insert.
+2. PDF reader: pdf.js, devicePixelRatio-aware canvas with dimension/area caps;
+   page turns via tap zones (left/right third), swipe, buttons, keyboard
+   arrows; pinch-zoom 1-5x (CSS transform during gesture, full re-render
+   after); fullscreen mode.
+3. Annotation overlay canvas with normalized 0-1 coordinates stored as JSONB:
+   freehand pen, semi-transparent highlighter, dashed toggle, two-point
+   straight lines, Pi (down-bow) and V (up-bow) stamps with size slider,
+   tap-to-erase with hit-testing, draggable text notes (size + color).
+   Colors: red blue green orange black white (white = whiteout). Stroke
+   format "KIND#hex~thickness" so all clients render identically. Undo last
+   stroke; "clear my page" and Chief "clear page (bowings + texts)" with
+   styled confirm dialog and a 30-second undo chip restoring strokes AND
+   texts.
+4. Pointer Events: mouse, touch, pen and eraser tip all draw with IDENTICAL
+   width — width comes only from a thickness slider (no pressure multiplier).
+   Palm rejection: ignore touch for 2s after last pen contact. S Pen barrel
+   button (e.buttons & 32 or pointerType eraser) = temporary erase mode;
+   release restores the previous tool.
+5. Broadcast mode: broadcast table (single row id=1) holds score_id and
+   master_page; master page turns write master_page debounced; clients
+   subscribe to realtime changes; LIVE badge; jump-to-master button.
+6. Layer compare: upload a PDF whose page count must equal the score's;
+   rendered semi-transparent over the base with an opacity slider; one layer
+   active at a time; delete own layer (chief any); excluded from print/export.
+7. Notice board: home page has two tabs (Library / Notices) sharing one
+   content area; members read; editors add/pin/edit/delete announcements via
+   add_announcement / update_announcement / delete_announcement RPCs.
+8. Print/Export: composite chosen content (bowings+text / bowings / text /
+   clean) at 1600px width; window.print() via hidden print area, or jsPDF
+   download; range = current page or whole document.
+9. Bilingual UI: zh-Hant default plus English, all strings in one I18N dict.
+10. Mobile-first dark theme, toast notifications, draggable FAB with
+    undo/erase/clear mini buttons (position persisted in localStorage),
+    hash-based router: #/library, #/view/{scoreId}, #/help.
+
+QUALITY BAR
+- No placeholders, no TODO, no truncated code — every function complete.
+- SQL idempotent (if not exists / create or replace / duplicate-handlers).
+- End with a SQL verification query listing all functions and a concise test
+  checklist.
+
+Deliver: (1) full SQL, (2) full index.html.
+
+Note: if your output gets truncated, I will reply "continue exactly where you
+stopped, no repetition" — resume seamlessly from that exact point.
